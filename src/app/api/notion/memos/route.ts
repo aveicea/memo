@@ -7,17 +7,27 @@ const headers = (token: string) => ({
   "Notion-Version": N_VER,
 });
 
-function parseBlocks(blocks: NotionBlock[]) {
+function parseBlocksToContent(blocks: NotionBlock[]): string {
   return blocks
     .filter(b => b.type === "paragraph" || b.type === "to_do")
     .map(b => {
       if (b.type === "to_do") {
         const text = b.to_do!.rich_text.map((r: RT) => r.plain_text).join("");
-        return { id: b.id, type: "to_do" as const, text, checked: b.to_do!.checked };
+        return `- [${b.to_do!.checked ? "x" : " "}] ${text}`;
       }
-      const text = b.paragraph!.rich_text.map((r: RT) => r.plain_text).join("");
-      return { id: b.id, type: "paragraph" as const, text };
-    });
+      return b.paragraph!.rich_text.map((r: RT) => r.plain_text).join("");
+    })
+    .join("\n");
+}
+
+function parseBlocksToTodos(blocks: NotionBlock[]): { id: string; checked: boolean; text: string }[] {
+  return blocks
+    .filter(b => b.type === "to_do")
+    .map(b => ({
+      id: b.id,
+      checked: b.to_do!.checked,
+      text: b.to_do!.rich_text.map((r: RT) => r.plain_text).join(""),
+    }));
 }
 
 function parseDate(ts: string): string {
@@ -67,7 +77,9 @@ export async function GET(req: NextRequest) {
           headers: headers(token),
         });
         const bData = await bRes.json();
-        const blocks = bRes.ok ? parseBlocks(bData.results ?? []) : [];
+        const rawBlocks: NotionBlock[] = bRes.ok ? (bData.results ?? []) : [];
+        const content = parseBlocksToContent(rawBlocks);
+        const todos = parseBlocksToTodos(rawBlocks);
 
         const folder = folderProp && props[folderProp]?.select?.name ? props[folderProp].select!.name : "";
         const pinned = pinnedProp ? (props[pinnedProp]?.checkbox ?? false) : false;
@@ -76,13 +88,13 @@ export async function GET(req: NextRequest) {
 
         return {
           id: page.id,
-          blocks,
+          content,
+          todos,
           createdAt: parseDate(page.created_time as string),
           reply,
           pinned,
           important,
           folder,
-          imageUrls: [],
         };
       })
     );
