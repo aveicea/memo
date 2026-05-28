@@ -1,58 +1,42 @@
 @import "tailwindcss";
 
-:root {
-  --bg: #f5f4f0;
-  --surface: #ffffff;
-  --border: #e8e6e0;
-  --text-primary: #1a1918;
-  --text-secondary: #7a7874;
-  --text-muted: #b0aca6;
-  --accent: #1a1918;
-  --accent-hover: #3a3836;
-  --step-active: #1a1918;
-  --step-inactive: #d0ccc6;
-  --step-done: #1a1918;
-}
-
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #FFF5F9;
+  color: #333;
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes y2kFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
+.animate-fadeIn { animation: fadeIn 0.4s ease forwards; }
 
-.animate-fade-in {
-  animation: fade-in 0.4s ease forwards;
-}
+.y2k-scroll::-webkit-scrollbar { width: 6px; }
+.y2k-scroll::-webkit-scrollbar-track { background: #FFF0F5; }
+.y2k-scroll::-webkit-scrollbar-thumb { background: #E8A8C0; border-radius: 4px; }
+.y2k-scroll { scrollbar-width: thin; scrollbar-color: #E8A8C0 #FFF0F5; }
 
-.animate-slide-in {
-  animation: slide-in 0.3s ease forwards;
+.folder-tabs::-webkit-scrollbar { display: none; }
+.folder-tabs { -ms-overflow-style: none; scrollbar-width: none; }
+
+.y2k-input:focus {
+  outline: 1px solid #E8A8C0 !important;
+  box-shadow: 0 0 0 3px rgba(232,168,192,0.1) !important;
 }
+.y2k-input::placeholder { color: #ccc; }
+
+.y2k-win-btn:hover { background: #E8A8C0 !important; color: white !important; }
+.folder-btn:hover  { background: #E8A8C0 !important; color: white !important; }
+.folder-btn:hover span, .folder-btn:hover svg { color: white !important; stroke: white !important; }
+
+.send-btn:hover:not(:disabled) { background: #E8A8C0 !important; transform: scale(1.05); }
