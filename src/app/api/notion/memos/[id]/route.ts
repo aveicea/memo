@@ -25,6 +25,29 @@ function parseRichText(text: string): RTItem[] {
   return items.length > 0 ? items : [{ type: "text", text: { content: text } }];
 }
 
+function linesToBlocks(content: string): unknown[] {
+  const items = content.split("\n")
+    .filter(l => l.trim() !== "")
+    .map(line => ({
+      indent: Math.floor((line.match(/^( *)/)?.[1]?.length ?? 0) / 2),
+      block: lineToBlock(line) as Record<string, unknown>,
+    }));
+  const result: Record<string, unknown>[] = [];
+  const stack: { indent: number; block: Record<string, unknown> }[] = [];
+  for (const item of items) {
+    while (stack.length > 0 && stack[stack.length - 1].indent >= item.indent) stack.pop();
+    if (stack.length === 0) {
+      result.push(item.block);
+    } else {
+      const parent = stack[stack.length - 1].block;
+      if (!parent.children) parent.children = [];
+      (parent.children as Record<string, unknown>[]).push(item.block);
+    }
+    stack.push(item);
+  }
+  return result;
+}
+
 function lineToBlock(line: string) {
   const trimmed = line.trimStart();
   const todoMatch = trimmed.match(/^- \[(x| )\] (.*)/);
@@ -65,7 +88,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           });
         }
       }
-      const children = (content as string).split("\n").filter((l: string) => l.trim() !== "").map(lineToBlock);
+      const children = linesToBlocks(content as string);
       if (children.length > 0) {
         await fetch(`https://api.notion.com/v1/blocks/${id}/children`, {
           method: "PATCH", headers: hdrs(token),

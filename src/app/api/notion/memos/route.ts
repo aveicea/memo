@@ -10,7 +10,7 @@ const hdrs = (token: string) => ({
 interface RT { plain_text: string; annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; code?: boolean } }
 interface RichTextBlock { rich_text: RT[] }
 interface NotionBlock {
-  id: string; type: string;
+  id: string; type: string; has_children?: boolean; _children?: NotionBlock[];
   paragraph?: RichTextBlock;
   to_do?: { rich_text: RT[]; checked: boolean };
   bulleted_list_item?: RichTextBlock;
@@ -52,41 +52,44 @@ function parseRichText(text: string): RTItem[] {
   return items.length > 0 ? items : [{ type: "text", text: { content: text } }];
 }
 
-function getBlockText(b: NotionBlock, numberedIdx = 0): string {
-  if (b.type === "to_do") {
-    const text = rtToMarkdown(b.to_do!.rich_text);
-    return `- [${b.to_do!.checked ? "x" : " "}] ${text}`;
-  }
+function getBlockText(b: NotionBlock, numberedIdx = 0, pre = ""): string {
+  if (b.type === "to_do") return `${pre}- [${b.to_do!.checked ? "x" : " "}] ${rtToMarkdown(b.to_do!.rich_text)}`;
   for (const t of RT_TYPES) {
     if (b.type === t) {
       const rt = (b[t] as RichTextBlock | undefined)?.rich_text ?? [];
       const text = rtToMarkdown(rt);
-      if (b.type === "bulleted_list_item") return `- ${text}`;
-      if (b.type === "numbered_list_item") return `${numberedIdx}. ${text}`;
-      return text;
+      if (b.type === "bulleted_list_item") return `${pre}- ${text}`;
+      if (b.type === "numbered_list_item") return `${pre}${numberedIdx}. ${text}`;
+      return `${pre}${text}`;
     }
   }
   return "";
 }
 
-function parseBlocksToContent(blocks: NotionBlock[]): string {
+function parseBlocksToContent(blocks: NotionBlock[], indent = 0): string {
   const parts: string[] = [];
-  let numberedIdx = 0;
+  const pre = "  ".repeat(indent);
+  let numIdx = 0;
   for (const b of blocks) {
     if (b.type === "image") continue;
-    if (b.type !== "numbered_list_item") numberedIdx = 0; else numberedIdx++;
-    const text = getBlockText(b, numberedIdx);
+    if (b.type !== "numbered_list_item") numIdx = 0; else numIdx++;
+    const text = getBlockText(b, numIdx, pre);
     if (text) parts.push(text);
+    if (b._children?.length) {
+      const child = parseBlocksToContent(b._children, indent + 1);
+      if (child) parts.push(child);
+    }
   }
   return parts.join("\n");
 }
 
 function parseBlocksToTodos(blocks: NotionBlock[]): { id: string; checked: boolean; text: string }[] {
-  return blocks.filter(b => b.type === "to_do").map(b => ({
-    id: b.id,
-    checked: b.to_do!.checked,
-    text: rtToMarkdown(b.to_do!.rich_text),
-  }));
+  const result: { id: string; checked: boolean; text: string }[] = [];
+  for (const b of blocks) {
+    if (b.type === "to_do") result.push({ id: b.id, checked: b.to_do!.checked, text: rtToMarkdown(b.to_do!.rich_text) });
+    if (b._children?.length) result.push(...parseBlocksToTodos(b._children));
+  }
+  return result;
 }
 
 function parseBlocksToImageUrls(blocks: NotionBlock[]): string[] {
@@ -101,6 +104,31 @@ function parseDate(ts: string): string {
   const d = new Date(ts);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Build a tree of Notion blocks from indented text lines.
+// Each 2-space indent becomes a nested child block, matching Notion's native tab indentation.
+function linesToBlocks(content: string): unknown[] {
+  const items = content.split("\n")
+    .filter(l => l.trim() !== "")
+    .map(line => ({
+      indent: Math.floor((line.match(/^( *)/)?.[1]?.length ?? 0) / 2),
+      block: lineToBlock(line) as Record<string, unknown>,
+    }));
+  const result: Record<string, unknown>[] = [];
+  const stack: { indent: number; block: Record<string, unknown> }[] = [];
+  for (const item of items) {
+    while (stack.length > 0 && stack[stack.length - 1].indent >= item.indent) stack.pop();
+    if (stack.length === 0) {
+      result.push(item.block);
+    } else {
+      const parent = stack[stack.length - 1].block;
+      if (!parent.children) parent.children = [];
+      (parent.children as Record<string, unknown>[]).push(item.block);
+    }
+    stack.push(item);
+  }
+  return result;
 }
 
 // Notion requires writing the page title under whatever name the database's
@@ -174,7 +202,15 @@ export async function GET(req: NextRequest) {
 
         const bRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, { headers: hdrs(token) });
         const bData = await bRes.json();
-        const rawBlocks: NotionBlock[] = bRes.ok ? (bData.results ?? []) : [];
+        const topBlocks: NotionBlock[] = bRes.ok ? (bData.results ?? []) : [];
+        // Fetch one level of children for any block that has them (preserves Notion indentation)
+        const rawBlocks: NotionBlock[] = await Promise.all(topBlocks.map(async b => {
+          if (!b.has_children) return b;
+          const cRes = await fetch(`https://api.notion.com/v1/blocks/${b.id}/children`, { headers: hdrs(token) });
+          if (!cRes.ok) return b;
+          const cData = await cRes.json();
+          return { ...b, _children: cData.results ?? [] };
+        }));
 
         const folder = folderProp && props[folderProp]?.select?.name ? props[folderProp].select!.name : "";
         const pinned = pinnedProp ? (props[pinnedProp]?.checkbox ?? false) : false;
@@ -215,8 +251,7 @@ export async function POST(req: NextRequest) {
   try {
     const { token, databaseId, content, folder, folderProp, pinnedProp, importantProp, dateProp, imageUploadIds } = await req.json();
 
-    const lines = (content as string).split("\n");
-    const children: unknown[] = lines.filter((l: string) => l.trim() !== "").map(lineToBlock);
+    const children: unknown[] = linesToBlocks(content as string);
 
     if (Array.isArray(imageUploadIds) && imageUploadIds.length > 0) {
       for (const uploadId of imageUploadIds) {
