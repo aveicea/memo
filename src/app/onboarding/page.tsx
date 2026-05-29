@@ -101,7 +101,7 @@ function folderToBubbleColor(hex: string): string {
 /* ── preview ── */
 function Preview({ d, folderOptions, onClickFolder }: { d: Design; folderOptions: string[]; onClickFolder: (i: number) => void }) {
   const accent = d.accent;
-  const displayFolders = folderOptions.length > 0 ? folderOptions.slice(0, 5) : ["폴더1","폴더2","폴더3"];
+  const displayFolders = folderOptions.length > 0 ? folderOptions : ["폴더1","폴더2","폴더3"];
   return (
     <div style={{ background:"#f8f8f8", borderRadius:12, padding:12, display:"flex", flexDirection:"column", gap:0, height:"100%", minHeight:380, overflow:"hidden" }}>
       <div style={{ fontSize:10, fontWeight:700, color:"#999", letterSpacing:0.5, marginBottom:8, textAlign:"center" }}>PREVIEW</div>
@@ -346,7 +346,17 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
     onNext({ ...d, fontFamily: FONTS[fontIdx].css });
   }
 
-  const folderRefs = Array.from({ length: 8 }, () => useRef<HTMLInputElement>(null));
+  // Single hidden color input shared by every folder swatch — keyed by an
+  // index ref so there's no hard cap on the number of folders.
+  const colorInputRef = useRef<HTMLInputElement>(null);
+  const editingIdxRef = useRef(0);
+  function openFolderColor(i: number) {
+    editingIdxRef.current = i;
+    if (colorInputRef.current) {
+      colorInputRef.current.value = d.folderColorPalette[i] ?? "#e0e0e0";
+      colorInputRef.current.click();
+    }
+  }
 
   return (
     <div className="animate-fadeIn" style={{ display:"flex", flexDirection:"column", gap:20 }}>
@@ -393,19 +403,19 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <SectionCard title="FOLDER COLORS">
             <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 4px" }}>
-              {(folderOptions.length ? folderOptions.slice(0, 8) : ["폴더1","폴더2","폴더3","폴더4"]).map((name, i) => {
+              {(folderOptions.length ? folderOptions : ["폴더1","폴더2","폴더3","폴더4"]).map((name, i) => {
                 const color = d.folderColorPalette[i] ?? "#e0e0e0";
                 return (
-                  <div key={i} onClick={() => folderRefs[i].current?.click()}
+                  <div key={i} onClick={() => openFolderColor(i)}
                     style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer", position:"relative" }}>
                     <FolderSvg size={36} color={color} />
                     <span title={name} style={{ fontSize:9, color:"#888", maxWidth:60, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center" }}>{name}</span>
-                    <input ref={folderRefs[i]} type="color" value={color} onChange={e=>setFolderColor(i,e.target.value)}
-                      style={{ position:"absolute", opacity:0, width:1, height:1, pointerEvents:"none" }} />
                   </div>
                 );
               })}
             </div>
+            <input ref={colorInputRef} type="color" onChange={e=>setFolderColor(editingIdxRef.current, e.target.value)}
+              style={{ position:"fixed", opacity:0, width:1, height:1, pointerEvents:"none", left:-9999, top:0 }} />
           </SectionCard>
 
           <SectionCard title="FONT">
@@ -436,7 +446,7 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
         </div>
 
         {/* RIGHT: PREVIEW */}
-        <Preview d={d} folderOptions={folderOptions} onClickFolder={i => folderRefs[i].current?.click()} />
+        <Preview d={d} folderOptions={folderOptions} onClickFolder={openFolderColor} />
       </div>
 
       {/* buttons */}
