@@ -441,7 +441,7 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
               </div>
             </div>
             <div style={{ padding:"0 16px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:12, color:"#888" }}>📱 모바일 맞춤 (전체화면·큰 글씨·터치)</span>
+              <span style={{ fontSize:12, color:"#888" }}>모바일 맞춤</span>
               <div onClick={() => setField("mobile", !d.mobile)}
                 style={{ width:38, height:20, borderRadius:10, background:d.mobile?"#E8A8C0":"#e0e0e0", cursor:"pointer", position:"relative", transition:"background 0.2s" }}>
                 <div style={{ position:"absolute", top:2, left:d.mobile?"20px":"2px", width:16, height:16, borderRadius:"50%", background:"#fff", transition:"left 0.2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
