@@ -13,6 +13,10 @@ interface Config {
   token: string; databaseId: string; title: string;
   folderOptions: string[]; folderColorPalette: string[];
   fontFamily: string; accent: string;
+  accentLight?: string; textColor?: string;
+  msgBubbleBg?: string; msgTextColor?: string;
+  replyBubbleBg?: string; replyTextColor?: string;
+  alignLeft?: boolean;
   folderProp?: string; pinnedProp?: string;
   importantProp?: string; replyProp?: string;
 }
@@ -32,26 +36,30 @@ function hex2hsl(hex: string): [number, number, number] {
   return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
 }
 
-function buildCssVars(accent: string, fontFamily: string): string {
+function buildCssVars(cfg: Config): string {
+  const accent = cfg.accent ?? "#E8A8C0";
   const [h, s, l] = hex2hsl(accent);
-  const aLight   = `hsl(${h},${s}%,${Math.min(l+9,97)}%)`;
-  const msgBub   = `hsl(${h},${Math.max(s-25,3)}%,${Math.min(l+13,97)}%)`;
-  const repBub   = `hsl(${h},${Math.min(s+5,75)}%,${Math.max(l-40,18)}%)`;
-  const border   = `hsl(${h},${Math.max(s-20,3)}%,${Math.min(l+11,96)}%)`;
-  const msgText  = `hsl(${h},${Math.max(s-30,5)}%,${Math.max(l-46,20)}%)`;
+  const aLight  = cfg.accentLight  ?? `hsl(${h},${s}%,${Math.min(l+9,97)}%)`;
+  const msgBub  = cfg.msgBubbleBg  ?? `hsl(${h},${Math.max(s-25,3)}%,${Math.min(l+13,97)}%)`;
+  const repBub  = cfg.replyBubbleBg ?? `hsl(${h},${Math.min(s+5,75)}%,${Math.max(l-40,18)}%)`;
+  const repText = cfg.replyTextColor ?? "#ffffff";
+  const msgText = cfg.msgTextColor  ?? `hsl(${h},${Math.max(s-30,5)}%,${Math.max(l-46,20)}%)`;
+  const textCol = cfg.textColor     ?? "#474747";
+  const border  = `hsl(${h},${Math.max(s-20,3)}%,${Math.min(l+11,96)}%)`;
+  const font    = cfg.fontFamily    ?? "'Pretendard Variable','Pretendard',sans-serif";
   return `
     :root {
       --accent: ${accent};
       --accent-light: ${aLight};
-      --text-color: #474747;
+      --text-color: ${textCol};
       --bg-color: #ffffff;
       --border-color: ${border};
       --border-dot: ${border};
       --msg-bubble-color: ${msgBub};
       --msg-text-color: ${msgText};
       --reply-bubble-color: ${repBub};
-      --reply-text-color: #ffffff;
-      --widget-font-family: ${fontFamily};
+      --reply-text-color: ${repText};
+      --widget-font-family: ${font};
     }
   `;
 }
@@ -243,6 +251,7 @@ export default function WidgetPage() {
 
   const accent     = cfg?.accent ?? "#E8A8C0";
   const fontFamily = cfg?.fontFamily ?? "'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif";
+  const cssVars    = cfg ? buildCssVars(cfg) : buildCssVars({ accent } as Config);
 
   const loadMemos = useCallback(async (cursor?: string) => {
     if (!cfg) return;
@@ -371,7 +380,7 @@ export default function WidgetPage() {
       padding:16, display:"flex", alignItems:"center", justifyContent:"center",
       fontFamily: fontFamily, background:"#ffffff",
     }}>
-      <style>{buildCssVars(accent, fontFamily)}</style>
+      <style>{cssVars}</style>
 
       <div className="y2k-widget" style={{
         width:"100%", maxWidth:"100%", height:"100%",
