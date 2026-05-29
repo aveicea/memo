@@ -92,6 +92,20 @@ function parseBlocksToTodos(blocks: NotionBlock[]): { id: string; checked: boole
   return result;
 }
 
+// Recursively fetch a block's children so nested indentation round-trips back
+// to the app. Capped at a few levels to avoid runaway requests on huge pages.
+async function fetchBlockTree(token: string, blockId: string, depth: number): Promise<NotionBlock[]> {
+  if (depth > 4) return [];
+  const res = await fetch(`https://api.notion.com/v1/blocks/${blockId}/children`, { headers: hdrs(token) });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const blocks: NotionBlock[] = data.results ?? [];
+  return Promise.all(blocks.map(async b => {
+    if (!b.has_children) return b;
+    return { ...b, _children: await fetchBlockTree(token, b.id, depth + 1) };
+  }));
+}
+
 function parseBlocksToImageUrls(blocks: NotionBlock[]): string[] {
   return blocks.filter(b => b.type === "image").map(b => {
     if (b.image?.type === "file") return b.image.file?.url ?? "";
@@ -106,29 +120,48 @@ function parseDate(ts: string): string {
   return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Build a tree of Notion blocks from indented text lines.
-// Each 2-space indent becomes a nested child block, matching Notion's native tab indentation.
-function linesToBlocks(content: string): unknown[] {
+// A node in the indentation tree: one block plus its nested children.
+export interface BlockNode { block: Record<string, unknown>; kids: BlockNode[] }
+
+// Build a tree of block nodes from indented text lines (2 spaces = one level).
+// We DON'T inline a `children` key on the blocks — Notion validates inline
+// nesting strictly (2-level cap + some paths reject it), which fails the whole
+// request. Instead we attach children afterward via append calls (see appendTree).
+export function linesToTree(content: string): BlockNode[] {
   const items = content.split("\n")
     .filter(l => l.trim() !== "")
     .map(line => ({
       indent: Math.floor((line.match(/^( *)/)?.[1]?.length ?? 0) / 2),
-      block: lineToBlock(line) as Record<string, unknown>,
+      node: { block: lineToBlock(line) as Record<string, unknown>, kids: [] } as BlockNode,
     }));
-  const result: Record<string, unknown>[] = [];
-  const stack: { indent: number; block: Record<string, unknown> }[] = [];
+  const roots: BlockNode[] = [];
+  const stack: { indent: number; node: BlockNode }[] = [];
   for (const item of items) {
     while (stack.length > 0 && stack[stack.length - 1].indent >= item.indent) stack.pop();
-    if (stack.length === 0) {
-      result.push(item.block);
-    } else {
-      const parent = stack[stack.length - 1].block;
-      if (!parent.children) parent.children = [];
-      (parent.children as Record<string, unknown>[]).push(item.block);
-    }
+    if (stack.length === 0) roots.push(item.node);
+    else stack[stack.length - 1].node.kids.push(item.node);
     stack.push(item);
   }
-  return result;
+  return roots;
+}
+
+// Append a flat batch of blocks under a parent, then recurse for each block's
+// kids using the returned block IDs. Each call sends a single flat level (no
+// inline `children` key), so Notion's nesting validation never trips.
+export async function appendTree(token: string, parentId: string, nodes: BlockNode[]): Promise<void> {
+  if (nodes.length === 0) return;
+  const res = await fetch(`https://api.notion.com/v1/blocks/${parentId}/children`, {
+    method: "PATCH", headers: hdrs(token),
+    body: JSON.stringify({ children: nodes.map(n => n.block) }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? "append failed");
+  const created: { id: string }[] = data.results ?? [];
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].kids.length > 0 && created[i]) {
+      await appendTree(token, created[i].id, nodes[i].kids);
+    }
+  }
 }
 
 // Notion requires writing the page title under whatever name the database's
@@ -200,17 +233,7 @@ export async function GET(req: NextRequest) {
           files?: Array<{ type: string; file?: { url: string }; external?: { url: string } }>;
         }>;
 
-        const bRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, { headers: hdrs(token) });
-        const bData = await bRes.json();
-        const topBlocks: NotionBlock[] = bRes.ok ? (bData.results ?? []) : [];
-        // Fetch one level of children for any block that has them (preserves Notion indentation)
-        const rawBlocks: NotionBlock[] = await Promise.all(topBlocks.map(async b => {
-          if (!b.has_children) return b;
-          const cRes = await fetch(`https://api.notion.com/v1/blocks/${b.id}/children`, { headers: hdrs(token) });
-          if (!cRes.ok) return b;
-          const cData = await cRes.json();
-          return { ...b, _children: cData.results ?? [] };
-        }));
+        const rawBlocks: NotionBlock[] = await fetchBlockTree(token, page.id as string, 0);
 
         const folder = folderProp && props[folderProp]?.select?.name ? props[folderProp].select!.name : "";
         const pinned = pinnedProp ? (props[pinnedProp]?.checkbox ?? false) : false;
@@ -251,11 +274,12 @@ export async function POST(req: NextRequest) {
   try {
     const { token, databaseId, content, folder, folderProp, pinnedProp, importantProp, dateProp, imageUploadIds } = await req.json();
 
-    const children: unknown[] = linesToBlocks(content as string);
-
+    // Top-level text blocks become the indentation tree; images append as flat
+    // root-level blocks after the text.
+    const roots = linesToTree(content as string);
     if (Array.isArray(imageUploadIds) && imageUploadIds.length > 0) {
       for (const uploadId of imageUploadIds) {
-        children.push({ object: "block", type: "image", image: { type: "file_upload", file_upload: { id: uploadId } } });
+        roots.push({ block: { object: "block", type: "image", image: { type: "file_upload", file_upload: { id: uploadId } } }, kids: [] });
       }
     }
 
@@ -269,12 +293,20 @@ export async function POST(req: NextRequest) {
     if (importantProp) properties[importantProp] = { checkbox: false };
     if (dateProp) properties[dateProp] = { date: { start: new Date().toISOString() } };
 
+    // Create the page empty, then append the block tree level-by-level so we
+    // never send an inline `children` key (which Notion rejects).
     const res = await fetch("https://api.notion.com/v1/pages", {
       method: "POST", headers: hdrs(token),
-      body: JSON.stringify({ parent: { database_id: databaseId }, properties, children }),
+      body: JSON.stringify({ parent: { database_id: databaseId }, properties }),
     });
     const data = await res.json();
     if (!res.ok) return NextResponse.json({ error: data.message }, { status: res.status });
+
+    try {
+      await appendTree(token, data.id, roots);
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "본문 저장 실패" }, { status: 500 });
+    }
 
     return NextResponse.json({ id: data.id });
   } catch {

@@ -1,75 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { linesToTree, appendTree } from "../route";
 
 const hdrs = (token: string) => ({
   Authorization: `Bearer ${token}`,
   "Content-Type": "application/json",
   "Notion-Version": "2022-06-28",
 });
-
-type RTItem = { type: "text"; text: { content: string }; annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; code?: boolean } };
-
-function parseRichText(text: string): RTItem[] {
-  const items: RTItem[] = [];
-  const regex = /\*\*([\s\S]+?)\*\*|_([\s\S]+?)_|~~([\s\S]+?)~~|`([\s\S]+?)`/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(text)) !== null) {
-    if (m.index > last) items.push({ type: "text", text: { content: text.slice(last, m.index) } });
-    if      (m[1] !== undefined) items.push({ type: "text", text: { content: m[1] }, annotations: { bold: true } });
-    else if (m[2] !== undefined) items.push({ type: "text", text: { content: m[2] }, annotations: { italic: true } });
-    else if (m[3] !== undefined) items.push({ type: "text", text: { content: m[3] }, annotations: { strikethrough: true } });
-    else if (m[4] !== undefined) items.push({ type: "text", text: { content: m[4] }, annotations: { code: true } });
-    last = regex.lastIndex;
-  }
-  if (last < text.length) items.push({ type: "text", text: { content: text.slice(last) } });
-  return items.length > 0 ? items : [{ type: "text", text: { content: text } }];
-}
-
-function linesToBlocks(content: string): unknown[] {
-  const items = content.split("\n")
-    .filter(l => l.trim() !== "")
-    .map(line => ({
-      indent: Math.floor((line.match(/^( *)/)?.[1]?.length ?? 0) / 2),
-      block: lineToBlock(line) as Record<string, unknown>,
-    }));
-  const result: Record<string, unknown>[] = [];
-  const stack: { indent: number; block: Record<string, unknown> }[] = [];
-  for (const item of items) {
-    while (stack.length > 0 && stack[stack.length - 1].indent >= item.indent) stack.pop();
-    if (stack.length === 0) {
-      result.push(item.block);
-    } else {
-      const parent = stack[stack.length - 1].block;
-      if (!parent.children) parent.children = [];
-      (parent.children as Record<string, unknown>[]).push(item.block);
-    }
-    stack.push(item);
-  }
-  return result;
-}
-
-function lineToBlock(line: string) {
-  const trimmed = line.trimStart();
-  const todoMatch = trimmed.match(/^- \[(x| )\] (.*)/);
-  if (todoMatch) return {
-    object: "block", type: "to_do",
-    to_do: { rich_text: parseRichText(todoMatch[2]), checked: todoMatch[1] === "x" },
-  };
-  const numberedMatch = trimmed.match(/^\d+\. (.*)/);
-  if (numberedMatch) return {
-    object: "block", type: "numbered_list_item",
-    numbered_list_item: { rich_text: parseRichText(numberedMatch[1]) },
-  };
-  const bulletMatch = trimmed.match(/^- (.*)/);
-  if (bulletMatch) return {
-    object: "block", type: "bulleted_list_item",
-    bulleted_list_item: { rich_text: parseRichText(bulletMatch[1]) },
-  };
-  return {
-    object: "block", type: "paragraph",
-    paragraph: { rich_text: parseRichText(trimmed || line) },
-  };
-}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -88,12 +24,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           });
         }
       }
-      const children = linesToBlocks(content as string);
-      if (children.length > 0) {
-        await fetch(`https://api.notion.com/v1/blocks/${id}/children`, {
-          method: "PATCH", headers: hdrs(token),
-          body: JSON.stringify({ children }),
-        });
+      // Append the new block tree level-by-level (no inline `children` key,
+      // which Notion rejects). Archiving a parent above also removed its
+      // children, so we rebuild the whole tree fresh.
+      const roots = linesToTree(content as string);
+      try {
+        await appendTree(token, id, roots);
+      } catch (e) {
+        return NextResponse.json({ error: e instanceof Error ? e.message : "본문 저장 실패" }, { status: 500 });
       }
       const title = (content as string).split("\n")[0].replace(/^- \[.\] /, "").replace(/^- /, "").slice(0, 100);
       // Resolve the page's actual title property name (not always "Name").
