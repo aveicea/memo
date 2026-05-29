@@ -755,7 +755,7 @@ export default function WidgetPage() {
   );
 
   const folderList    = cfg?.folderOptions ?? [];
-  const defaultFolder = cfg?.folderOptions[0] ?? "";
+  const defaultFolder = cfg?.folderOptions?.[0] ?? "";
 
   const effectiveFolder = (m: Memo) => m.folder || defaultFolder;
 
@@ -767,19 +767,19 @@ export default function WidgetPage() {
   const folderColor = (f: string): string | undefined => {
     if (!cfg) return undefined;
     const eff = f || defaultFolder;
-    const i = cfg.folderOptions.indexOf(eff);
-    return i >= 0 ? (cfg.folderColorPalette[i] ?? undefined) : undefined;
+    const i = cfg.folderOptions?.indexOf(eff) ?? -1;
+    return i >= 0 ? (cfg.folderColorPalette?.[i] ?? undefined) : undefined;
   };
   const folderBubbleColor = (f: string): string | undefined => {
     if (!cfg?.folderBubblePalette) return undefined;
     const eff = f || defaultFolder;
-    const i = cfg.folderOptions.indexOf(eff);
+    const i = cfg.folderOptions?.indexOf(eff) ?? -1;
     return i >= 0 ? (cfg.folderBubblePalette[i] || undefined) : undefined;
   };
 
   const sidebarItems: Array<{ type: "folder"|"pinned"|"important"|"empty"; label?: string; color?: string }> = [];
   folderList.forEach((f, i) => {
-    sidebarItems.push({ type: "folder", label: f, color: cfg ? (cfg.folderColorPalette[i] ?? "var(--accent)") : "var(--accent)" });
+    sidebarItems.push({ type: "folder", label: f, color: cfg?.folderColorPalette?.[i] ?? "var(--accent)" });
     if (i === 0) sidebarItems.push({ type: "pinned" });
     else if (i === 1) sidebarItems.push({ type: "important" });
     else sidebarItems.push({ type: "empty" });
