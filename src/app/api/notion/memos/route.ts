@@ -68,7 +68,7 @@ function getBlockText(b: NotionBlock, numberedIdx = 0, pre = ""): string {
 
 function parseBlocksToContent(blocks: NotionBlock[], indent = 0): string {
   const parts: string[] = [];
-  const pre = "  ".repeat(indent);
+  const pre = "    ".repeat(indent);
   let numIdx = 0;
   for (const b of blocks) {
     if (b.type === "image") continue;
@@ -131,7 +131,7 @@ export function linesToTree(content: string): BlockNode[] {
   const items = content.split("\n")
     .filter(l => l.trim() !== "")
     .map(line => ({
-      indent: Math.floor((line.match(/^( *)/)?.[1]?.length ?? 0) / 2),
+      indent: Math.floor((line.match(/^( *)/)?.[1]?.length ?? 0) / 4),
       node: { block: lineToBlock(line) as Record<string, unknown>, kids: [] } as BlockNode,
     }));
   const roots: BlockNode[] = [];

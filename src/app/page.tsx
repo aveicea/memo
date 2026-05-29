@@ -108,7 +108,7 @@ function parseLines(content: string) {
   while (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === "") rawLines.pop();
   return rawLines.map(line => {
     const indentCount = line.match(/^( *)/)?.[1]?.length ?? 0;
-    const indent = Math.floor(indentCount / 2);
+    const indent = Math.floor(indentCount / 4);
     const trimmed = line.trimStart();
     const todo = trimmed.match(/^- \[(x| )\] (.+)/);
     if (todo) return { type: "todo" as const, checked: todo[1]==="x", text: todo[2], indent };
@@ -414,13 +414,13 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
                   const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const v = ta.value;
                   const lineStart = v.lastIndexOf("\n", s - 1) + 1;
                   if (e.shiftKey) {
-                    if (v.slice(lineStart, lineStart + 2) === "  ") {
-                      editCursorRef.current = Math.max(s - 2, lineStart);
-                      setEditText(v.slice(0, lineStart) + v.slice(lineStart + 2));
+                    if (v.slice(lineStart, lineStart + 4) === "    ") {
+                      editCursorRef.current = Math.max(s - 4, lineStart);
+                      setEditText(v.slice(0, lineStart) + v.slice(lineStart + 4));
                     }
                   } else {
-                    editCursorRef.current = s + 2;
-                    setEditText(v.slice(0, lineStart) + "  " + v.slice(lineStart));
+                    editCursorRef.current = s + 4;
+                    setEditText(v.slice(0, lineStart) + "    " + v.slice(lineStart));
                   }
                 }
               }}
@@ -889,13 +889,13 @@ export default function WidgetPage() {
       const val = ta.value;
       const lineStart = val.lastIndexOf("\n", start - 1) + 1;
       if (e.shiftKey) {
-        if (val.slice(lineStart, lineStart + 2) === "  ") {
-          cursorPosRef.current = Math.max(start - 2, lineStart);
-          setInputText(val.slice(0, lineStart) + val.slice(lineStart + 2));
+        if (val.slice(lineStart, lineStart + 4) === "    ") {
+          cursorPosRef.current = Math.max(start - 4, lineStart);
+          setInputText(val.slice(0, lineStart) + val.slice(lineStart + 4));
         }
       } else {
-        cursorPosRef.current = start + 2;
-        setInputText(val.slice(0, lineStart) + "  " + val.slice(lineStart));
+        cursorPosRef.current = start + 4;
+        setInputText(val.slice(0, lineStart) + "    " + val.slice(lineStart));
       }
     }
     // Notion-style inline formatting shortcuts
