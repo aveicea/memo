@@ -118,6 +118,31 @@ function parseLines(content: string) {
   });
 }
 
+function renderInputPreview(text: string): React.ReactNode {
+  return text.split("\n").map((line, i) => {
+    const trimmed = line.trimStart();
+    const todo = trimmed.match(/^- \[(x| )\] ?(.*)/);
+    if (todo) return (
+      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em" }}>
+        <span style={{ flexShrink: 0, marginTop: 2, opacity: todo[1]==="x" ? 0.35 : 0.6 }}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+            {todo[1]==="x" && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
+          </svg>
+        </span>
+        <span style={{ textDecoration: todo[1]==="x" ? "line-through" : "none", opacity: todo[1]==="x" ? 0.4 : 1 }}>{todo[2]}</span>
+      </div>
+    );
+    if (trimmed.startsWith("- ")) return (
+      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em" }}>
+        <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, marginTop: 2 }}>•</span>
+        <span>{trimmed.slice(2)}</span>
+      </div>
+    );
+    return <div key={i} style={{ minHeight: "1.5em" }}>{line || <>&nbsp;</>}</div>;
+  });
+}
+
 function MemoContent({ content, todos, onToggle }: {
   content: string; todos: Todo[];
   onToggle: (id: string, checked: boolean) => void;
@@ -240,75 +265,56 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
         {/* ROW: left buttons + bubble */}
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
 
-          {/* LEFT ACTIONS: horizontal */}
-          <div style={{ display: "flex", flexDirection: "row", gap: 2, alignItems: "center" }}>
-            <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                color: memo.pinned ? "var(--accent)" : "#ccc",
-                opacity: (hover || memo.pinned) ? 1 : 0,
-                pointerEvents: (hover || memo.pinned) ? "auto" : "none",
-                transition: "color 0.15s, opacity 0.15s" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
-            ><PinIcon /></button>
-
-            <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                color: memo.important ? "var(--accent)" : "#ccc",
-                opacity: (hover || memo.important) ? 1 : 0,
-                pointerEvents: (hover || memo.important) ? "auto" : "none",
-                transition: "color 0.15s, opacity 0.15s", fontSize: 13 }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
-            >♥</button>
-
-            <button onClick={copyText} title="복사"
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                color: "#ccc",
-                opacity: hover ? 1 : 0,
-                pointerEvents: hover ? "auto" : "none",
-                transition: "color 0.15s, opacity 0.15s" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-          </div>
-
-          {/* BUBBLE with floating reply button */}
-          <div style={{ position: "relative" }}>
-            <div style={{
-              background: bubbleBg, border: "none",
-              padding: "9px 14px", borderRadius: "12px 12px 2px 12px",
-              fontSize: 13, color: textColor, lineHeight: 1.4,
-              wordBreak: "break-word", whiteSpace: "pre-wrap",
-              boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
-              transition: "background 0.2s, color 0.2s",
-            }}>
-              <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} />
-              {memo.imageUrls.length > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 4, marginTop: memo.content.trim() ? 8 : 0 }}>
-                  {memo.imageUrls.map((url, idx) => (
-                    <img key={idx} src={url} alt=""
-                      style={{ width: "100%", maxHeight: 150, aspectRatio: "4/3", objectFit: "cover", borderRadius: 5, border: "1px solid rgba(0,0,0,0.08)", display: "block" }} />
-                  ))}
-                </div>
-              )}
+          {/* LEFT ACTIONS: copy first, then pin/heart — collapse to 0 width when hidden so no gap */}
+          <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+            {/* COPY — hover only, leftmost */}
+            <div style={{ maxWidth: hover ? 22 : 0, overflow: "hidden", opacity: hover ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={copyText} title="복사"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc", transition: "color 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
+              ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
             </div>
 
-            {/* Reply floating button on bottom-right of bubble */}
-            <button onClick={onReply} title="답글"
-              style={{ position: "absolute", bottom: -8, right: 2,
-                background: "var(--bg-color)", border: "1px solid var(--border-color)",
-                borderRadius: "50%", width: 20, height: 20,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", color: "#bbb",
-                opacity: hover ? 1 : 0, pointerEvents: hover ? "auto" : "none",
-                transition: "opacity 0.15s, color 0.15s",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "#bbb"; }}
-            ><ReplyIcon /></button>
+            {/* PIN — hover (gray) or when active */}
+            <div style={{ maxWidth: (hover || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
+                  color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
+              ><PinIcon /></button>
+            </div>
+
+            {/* HEART — hover (gray) or when active */}
+            <div style={{ maxWidth: (hover || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
+                  color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
+              >♥</button>
+            </div>
+          </div>
+
+          {/* BUBBLE */}
+          <div style={{
+            background: bubbleBg, border: "none",
+            padding: "9px 14px", borderRadius: "12px 12px 2px 12px",
+            fontSize: 13, color: textColor, lineHeight: 1.4,
+            wordBreak: "break-word", whiteSpace: "pre-wrap",
+            boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
+            transition: "background 0.2s, color 0.2s",
+          }}>
+            <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} />
+            {memo.imageUrls.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 4, marginTop: memo.content.trim() ? 8 : 0 }}>
+                {memo.imageUrls.map((url, idx) => (
+                  <img key={idx} src={url} alt=""
+                    style={{ width: "100%", maxHeight: 150, aspectRatio: "4/3", objectFit: "cover", borderRadius: 5, border: "1px solid rgba(0,0,0,0.08)", display: "block" }} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -319,6 +325,7 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
           transition: "height 0.15s",
         }}>
           {[
+            { label: "답글", onClick: onReply, icon: <ReplyIcon /> },
             { label: "수정", onClick: startEdit,
               icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
             { label: "삭제", onClick: onDelete,
@@ -937,19 +944,37 @@ export default function WidgetPage() {
                 }} />
             </label>
 
-            <textarea ref={textareaRef} value={inputText}
-              onChange={e => setInputText(applyMarkdownShortcuts(e.target.value))}
-              onKeyDown={handleTextareaKeyDown}
-              onPaste={handlePaste}
-              placeholder={replyingMemo ? "답글 입력..." : "memo"} autoComplete="off" rows={1}
-              className="y2k-input"
-              style={{
-                flex:1, padding:"7px 10px", border:"1px solid var(--border-color, #e8e8e8)",
-                borderRadius:4, fontSize:13, fontFamily:"inherit", color:"var(--text-color)",
-                outline:"none", background:"var(--bg-color)", transition:"all 0.2s ease",
-                resize:"none", overflow:"hidden", lineHeight:1.5, minHeight:32, maxHeight:120,
-              }}
-            />
+            {/* Textarea with markdown preview overlay */}
+            <div style={{ flex: 1, position: "relative" }}>
+              {/* Rendered markdown preview (sits on top, pointer-events none) */}
+              <div aria-hidden style={{
+                position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+                padding: "7px 10px", fontSize: 13, fontFamily: "inherit", lineHeight: 1.5,
+                color: "var(--text-color)", pointerEvents: "none",
+                whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "hidden",
+              }}>
+                {inputText
+                  ? renderInputPreview(inputText)
+                  : <span style={{ color: "#bbb", fontStyle: "normal" }}>{replyingMemo ? "답글 입력..." : "memo"}</span>
+                }
+              </div>
+              <textarea ref={textareaRef} value={inputText}
+                onChange={e => setInputText(applyMarkdownShortcuts(e.target.value))}
+                onKeyDown={handleTextareaKeyDown}
+                onPaste={handlePaste}
+                placeholder="" autoComplete="off" rows={1}
+                className="y2k-input"
+                style={{
+                  display: "block", width: "100%", padding: "7px 10px",
+                  border: "1px solid var(--border-color, #e8e8e8)",
+                  borderRadius: 4, fontSize: 13, fontFamily: "inherit",
+                  color: "transparent", caretColor: "var(--text-color)",
+                  outline: "none", background: "var(--bg-color)", transition: "border 0.2s ease",
+                  resize: "none", overflow: "hidden", lineHeight: 1.5, minHeight: 32, maxHeight: 120,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
 
             <button type="submit" disabled={(!inputText.trim() && pendingImages.length === 0) || sending}
               className="y2k-send"
