@@ -397,9 +397,10 @@ export default function WidgetPage() {
   }, []);
 
   useEffect(() => {
-    const isSpecialTab = activeFolder === "ALL" || activeFolder === "고정" || activeFolder === "중요";
-    setShowSidebar(!isSpecialTab);
-  }, [activeFolder]);
+    // Sidebar only visible when viewing the default (first) folder tab
+    const defaultF = cfg?.folderOptions?.[0] ?? "";
+    setShowSidebar(!!defaultF && activeFolder === defaultF);
+  }, [activeFolder, cfg]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -497,7 +498,7 @@ export default function WidgetPage() {
     const images = [...pendingImages];
     setSending(true);
     setInputText("");
-    setPendingImages(prev => { prev.forEach(i => URL.revokeObjectURL(i.preview)); return []; });
+    setPendingImages([]);
 
     if (replyingTo) {
       const id = replyingTo;
@@ -594,6 +595,7 @@ export default function WidgetPage() {
   }
 
   function handleTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Escape" && replyingTo) { setReplyingTo(null); return; }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMemo(e as unknown as React.FormEvent); return; }
     if (e.key === "Tab") {
@@ -843,7 +845,7 @@ export default function WidgetPage() {
             {/* ALL tab: grouped by folder with collapsible sections */}
             {activeFolder === "ALL" && folderGroups
               ? Array.from(folderGroups.entries()).map(([folder, fMemos]) => {
-                  const isExpanded = expandedFolders.has(folder);
+                  const isExpanded = expandedFolders.size === 0 ? folder === defaultFolder : expandedFolders.has(folder);
                   const fColor = folderColor(folder) ?? "var(--accent)";
                   return (
                     <div key={folder} style={{ marginBottom: 4 }}>
