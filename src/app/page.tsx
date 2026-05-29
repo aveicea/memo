@@ -127,7 +127,7 @@ function renderInputPreview(text: string): React.ReactNode {
     const todo = trimmed.match(/^- \[(x| )\] ?(.*)/);
     if (todo) return (
       <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
-        <span style={{ flexShrink: 0, marginTop: 2, opacity: todo[1]==="x" ? 0.35 : 0.6 }}>
+        <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: todo[1]==="x" ? 0.35 : 0.6 }}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
             {todo[1]==="x" && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
@@ -138,7 +138,7 @@ function renderInputPreview(text: string): React.ReactNode {
     );
     if (trimmed.startsWith("- ")) return (
       <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
-        <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, marginTop: 2 }}>•</span>
+        <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, height: "1.4em", display: "flex", alignItems: "center" }}>•</span>
         <span>{trimmed.slice(2)}</span>
       </div>
     );
@@ -167,7 +167,7 @@ function MemoContent({ content, todos, onToggle }: {
           return (
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, cursor: "pointer", paddingLeft: line.indent * 14 }}
               onClick={() => tid && onToggle(tid, !line.checked)}>
-              <span style={{ flexShrink: 0, marginTop: 1, opacity: line.checked ? 0.35 : 0.6 }}>
+              <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: line.checked ? 0.35 : 0.6 }}>
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
                   {line.checked && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
@@ -180,7 +180,7 @@ function MemoContent({ content, todos, onToggle }: {
         if (line.type === "bullet") {
           return (
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
-              <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, marginTop: 1 }}>•</span>
+              <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, height: "1.4em", display: "flex", alignItems: "center" }}>•</span>
               <span style={{ wordBreak: "break-word" }}>{line.text}</span>
             </div>
           );
@@ -680,6 +680,29 @@ export default function WidgetPage() {
         setInputText(val.slice(0, start) + insert + val.slice(start));
       }
       return;
+    }
+    if (e.key === "Backspace") {
+      // Deleting at the start of a list item's text removes the whole marker
+      // (- [ ] / - ) at once instead of leaving a broken "- [" behind.
+      const ta = e.currentTarget;
+      const start = ta.selectionStart ?? 0;
+      const end = ta.selectionEnd ?? 0;
+      if (start === end) {
+        const val = ta.value;
+        const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+        const m = val.slice(lineStart).match(/^(\s*)(- \[[ x]\] |- )/);
+        if (m) {
+          const indentLen = m[1].length;
+          const editStart = lineStart + m[0].length;
+          // cursor is anywhere inside the marker (incl. right after it)
+          if (start > lineStart + indentLen && start <= editStart) {
+            e.preventDefault();
+            cursorPosRef.current = lineStart + indentLen;
+            setInputText(val.slice(0, lineStart + indentLen) + val.slice(editStart));
+            return;
+          }
+        }
+      }
     }
     if (e.key === "ArrowLeft" && !e.shiftKey) {
       const ta = e.currentTarget;
