@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { CONFIG_STORAGE_KEY, decodeConfig } from "@/lib/config";
 
 interface Todo { id: string; checked: boolean; text: string }
 interface Memo {
@@ -373,7 +374,24 @@ export default function WidgetPage() {
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
-    const raw = localStorage.getItem("bubble-memo-config");
+    // 1) A config embedded in the URL (?config=base64) takes priority — this is
+    //    how a shared link bootstraps the widget. Persist it then clean the URL.
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get("config");
+    if (encoded) {
+      const decoded = decodeConfig<Config>(encoded);
+      if (decoded?.token) {
+        localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(decoded));
+        setCfg(decoded);
+        setCfgLoaded(true);
+        params.delete("config");
+        const clean = window.location.pathname + (params.toString() ? `?${params}` : "");
+        window.history.replaceState(null, "", clean);
+        return;
+      }
+    }
+    // 2) Otherwise fall back to whatever was saved locally.
+    const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
     if (raw) setCfg(JSON.parse(raw));
     setCfgLoaded(true);
   }, []);
@@ -642,9 +660,9 @@ export default function WidgetPage() {
 
   const replyingMemo = replyingTo ? memos.find(m => m.id === replyingTo) : null;
 
-  // Group memos by folder for ALL tab
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const folderGroups = useMemo(() => {
+  // Group memos by folder for ALL tab (plain computation — must not be a hook
+  // here since it runs after the early `!cfgLoaded` return above)
+  const folderGroups = (() => {
     if (activeFolder !== "ALL" || folderList.length === 0) return null;
     const groups = new Map<string, Memo[]>();
     for (const f of folderList) groups.set(f, []);
@@ -654,7 +672,7 @@ export default function WidgetPage() {
       else groups.set(f, [m]);
     }
     return groups;
-  }, [activeFolder, memos, folderList, defaultFolder]);
+  })();
 
   function toggleFolderExpand(f: string) {
     setExpandedFolders(prev => {
@@ -747,7 +765,7 @@ export default function WidgetPage() {
             </div>
             <div className="y2k-win-btn"
               style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>_</div>
-            <div className="y2k-win-btn" onClick={() => { localStorage.removeItem("bubble-memo-config"); router.push("/onboarding"); }}
+            <div className="y2k-win-btn" onClick={() => { localStorage.removeItem(CONFIG_STORAGE_KEY); router.push("/onboarding"); }}
               style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>x</div>
           </div>
         </div>
