@@ -17,26 +17,51 @@ body {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .animate-fadeIn { animation: fadeIn 0.4s ease forwards; }
 
+/* widget */
+.y2k-widget {
+  transition: transform 0.2s ease;
+  box-shadow: 2px 2px 0px color-mix(in srgb, var(--accent) 30%, transparent),
+              4px 4px 12px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.y2k-widget:hover { transform: translateY(-2px); }
+
+/* scrollbar */
 .y2k-scroll::-webkit-scrollbar { width: 6px; }
-.y2k-scroll::-webkit-scrollbar-track { background: #FFF0F5; }
-.y2k-scroll::-webkit-scrollbar-thumb { background: #E8A8C0; border-radius: 4px; }
-.y2k-scroll { scrollbar-width: thin; scrollbar-color: #E8A8C0 #FFF0F5; }
+.y2k-scroll::-webkit-scrollbar-track { background: var(--accent-light, #FFF0F5); }
+.y2k-scroll::-webkit-scrollbar-thumb { background: var(--accent, #E8A8C0); border-radius: 4px; }
+.y2k-scroll { scrollbar-width: thin; scrollbar-color: var(--accent, #E8A8C0) var(--accent-light, #FFF0F5); }
 
-.folder-tabs::-webkit-scrollbar { display: none; }
-.folder-tabs { -ms-overflow-style: none; scrollbar-width: none; }
+/* hide folder tab scrollbar */
+.y2k-folder-tabs::-webkit-scrollbar { display: none; }
+.y2k-folder-tabs { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* input */
 .y2k-input:focus {
-  outline: 1px solid #E8A8C0 !important;
-  box-shadow: 0 0 0 3px rgba(232,168,192,0.1) !important;
+  outline: 1px solid var(--accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent) !important;
 }
 .y2k-input::placeholder { color: #ccc; }
 
-.y2k-win-btn:hover { background: #E8A8C0 !important; color: white !important; }
-.folder-btn:hover  { background: #E8A8C0 !important; color: white !important; }
-.folder-btn:hover span, .folder-btn:hover svg { color: white !important; stroke: white !important; }
+/* send button */
+.y2k-send:hover:not(:disabled) {
+  background: var(--accent) !important;
+  transform: scale(1.05);
+}
 
-.send-btn:hover:not(:disabled) { background: #E8A8C0 !important; transform: scale(1.05); }
+/* window buttons */
+.y2k-win-btn:hover { background: var(--accent) !important; color: white !important; }
+
+/* folder buttons */
+.y2k-folder-btn:hover { background: var(--accent) !important; color: white !important; }
+.y2k-folder-btn:hover span, .y2k-folder-btn:hover svg {
+  color: white !important;
+  stroke: white !important;
+}
