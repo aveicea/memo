@@ -11,7 +11,7 @@ interface Design {
   accent: string; accentLight: string; textColor: string;
   msgBubbleBg: string; msgTextColor: string;
   replyBubbleBg: string; replyTextColor: string;
-  folderColorPalette: string[]; fontFamily: string; alignLeft: boolean;
+  folderColorPalette: string[]; folderBubblePalette: string[]; fontFamily: string; alignLeft: boolean;
 }
 interface Config extends Design {
   token: string; databaseId: string; title: string; folderOptions: string[];
@@ -20,13 +20,13 @@ interface Config extends Design {
 
 /* ── theme presets ── */
 const PRESETS: Array<{ label: string; dot: string } & Design> = [
-  { label:"파스텔톤", dot:"#E8A8C0", accent:"#E8A8C0", accentLight:"#FFF0F5", textColor:"#666666", msgBubbleBg:"#ffffff", msgTextColor:"#666666", replyBubbleBg:"#FFF0F5", replyTextColor:"#D4849E", folderColorPalette:["#FFB3BA","#E2D1F0","#C6EBC5","#FFDFBA","#BAE1FF","#FFD1DC","#B5EAD7","#FFDAC1"], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
-  { label:"핑크",    dot:"#F472B6", accent:"#F472B6", accentLight:"#FDF2F8", textColor:"#5b5b5b", msgBubbleBg:"#ffffff", msgTextColor:"#5b5b5b", replyBubbleBg:"#FCE7F3", replyTextColor:"#be185d", folderColorPalette:["#fbcfe8","#f9a8d4","#f472b6","#ec4899","#db2777","#be185d","#9d174d","#831843"], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
-  { label:"블랙",    dot:"#333333", accent:"#474747", accentLight:"#f5f5f5", textColor:"#333333", msgBubbleBg:"#ffffff", msgTextColor:"#333333", replyBubbleBg:"#474747", replyTextColor:"#ffffff", folderColorPalette:["#d4d4d4","#b5b5b5","#949494","#787878","#666666","#454545","#2a2a2a","#111111"], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
-  { label:"보라",    dot:"#9F7AEA", accent:"#9F7AEA", accentLight:"#FAF5FF", textColor:"#4a4a4a", msgBubbleBg:"#ffffff", msgTextColor:"#4a4a4a", replyBubbleBg:"#E9D8FD", replyTextColor:"#553c9a", folderColorPalette:["#e9d8fd","#d6bcfa","#b794f4","#9f7aea","#805ad5","#6b46c1","#553c9a","#44337a"], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
-  { label:"그린",    dot:"#68D391", accent:"#68D391", accentLight:"#F0FFF4", textColor:"#276749", msgBubbleBg:"#ffffff", msgTextColor:"#276749", replyBubbleBg:"#C6F6D5", replyTextColor:"#276749", folderColorPalette:["#c6f6d5","#9ae6b4","#68d391","#48bb78","#38a169","#2f855a","#276749","#22543d"], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
-  { label:"블루",    dot:"#63B3ED", accent:"#63B3ED", accentLight:"#EBF8FF", textColor:"#2c5282", msgBubbleBg:"#ffffff", msgTextColor:"#2c5282", replyBubbleBg:"#BEE3F8", replyTextColor:"#2c5282", folderColorPalette:["#bee3f8","#90cdf4","#63b3ed","#4299e1","#3182ce","#2b6cb0","#2c5282","#2a4365"], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
-  { label:"노랑",    dot:"#ECC94B", accent:"#ECC94B", accentLight:"#FFFFF0", textColor:"#744210", msgBubbleBg:"#ffffff", msgTextColor:"#744210", replyBubbleBg:"#FEFCBF", replyTextColor:"#744210", folderColorPalette:["#fefcbf","#faf089","#f6e05e","#ecc94b","#d69e2e","#b7791f","#975a16","#744210"], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
+  { label:"파스텔톤", dot:"#E8A8C0", accent:"#E8A8C0", accentLight:"#FFF0F5", textColor:"#666666", msgBubbleBg:"#ffffff", msgTextColor:"#666666", replyBubbleBg:"#FFF0F5", replyTextColor:"#D4849E", folderColorPalette:["#FFB3BA","#E2D1F0","#C6EBC5","#FFDFBA","#BAE1FF","#FFD1DC","#B5EAD7","#FFDAC1"], folderBubblePalette:[], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
+  { label:"핑크",    dot:"#F472B6", accent:"#F472B6", accentLight:"#FDF2F8", textColor:"#5b5b5b", msgBubbleBg:"#ffffff", msgTextColor:"#5b5b5b", replyBubbleBg:"#FCE7F3", replyTextColor:"#be185d", folderColorPalette:["#fbcfe8","#f9a8d4","#f472b6","#ec4899","#db2777","#be185d","#9d174d","#831843"], folderBubblePalette:[], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
+  { label:"블랙",    dot:"#333333", accent:"#474747", accentLight:"#f5f5f5", textColor:"#333333", msgBubbleBg:"#ffffff", msgTextColor:"#333333", replyBubbleBg:"#474747", replyTextColor:"#ffffff", folderColorPalette:["#d4d4d4","#b5b5b5","#949494","#787878","#666666","#454545","#2a2a2a","#111111"], folderBubblePalette:[], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
+  { label:"보라",    dot:"#9F7AEA", accent:"#9F7AEA", accentLight:"#FAF5FF", textColor:"#4a4a4a", msgBubbleBg:"#ffffff", msgTextColor:"#4a4a4a", replyBubbleBg:"#E9D8FD", replyTextColor:"#553c9a", folderColorPalette:["#e9d8fd","#d6bcfa","#b794f4","#9f7aea","#805ad5","#6b46c1","#553c9a","#44337a"], folderBubblePalette:[], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
+  { label:"그린",    dot:"#68D391", accent:"#68D391", accentLight:"#F0FFF4", textColor:"#276749", msgBubbleBg:"#ffffff", msgTextColor:"#276749", replyBubbleBg:"#C6F6D5", replyTextColor:"#276749", folderColorPalette:["#c6f6d5","#9ae6b4","#68d391","#48bb78","#38a169","#2f855a","#276749","#22543d"], folderBubblePalette:[], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
+  { label:"블루",    dot:"#63B3ED", accent:"#63B3ED", accentLight:"#EBF8FF", textColor:"#2c5282", msgBubbleBg:"#ffffff", msgTextColor:"#2c5282", replyBubbleBg:"#BEE3F8", replyTextColor:"#2c5282", folderColorPalette:["#bee3f8","#90cdf4","#63b3ed","#4299e1","#3182ce","#2b6cb0","#2c5282","#2a4365"], folderBubblePalette:[], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
+  { label:"노랑",    dot:"#ECC94B", accent:"#ECC94B", accentLight:"#FFFFF0", textColor:"#744210", msgBubbleBg:"#ffffff", msgTextColor:"#744210", replyBubbleBg:"#FEFCBF", replyTextColor:"#744210", folderColorPalette:["#fefcbf","#faf089","#f6e05e","#ecc94b","#d69e2e","#b7791f","#975a16","#744210"], folderBubblePalette:[], fontFamily:"'Pretendard Variable','Pretendard',sans-serif", alignLeft:false },
 ];
 
 const DEFAULT_DESIGN: Design = PRESETS[0];
@@ -95,16 +95,26 @@ function hex2hsl(hex: string): [number, number, number] {
 function folderToBubbleColor(hex: string): string {
   if (!hex || !hex.startsWith("#") || hex.length < 7) return "#f5f5f5";
   const [h, s] = hex2hsl(hex);
-  return `hsl(${h}, ${Math.max(Math.min(s, 70), 35)}%, 90%)`;
+  return `hsl(${h}, ${Math.min(s * 0.4, 30)}%, 93%)`;
 }
 
 /* ── preview ── */
-function Preview({ d, folderOptions, onClickFolder }: { d: Design; folderOptions: string[]; onClickFolder: (i: number) => void }) {
+const colorInputStyle: React.CSSProperties = {
+  position:"absolute", opacity:0, inset:0, width:"100%", height:"100%",
+  cursor:"pointer", border:"none", padding:0,
+};
+
+function Preview({ d, folderOptions, onChangeFolderColor, onChangeBubbleColor }: {
+  d: Design; folderOptions: string[];
+  onChangeFolderColor: (i: number, c: string) => void;
+  onChangeBubbleColor: (i: number, c: string) => void;
+}) {
   const accent = d.accent;
   const displayFolders = folderOptions.length > 0 ? folderOptions : ["폴더1","폴더2","폴더3"];
   return (
     <div style={{ background:"#f8f8f8", borderRadius:12, padding:12, display:"flex", flexDirection:"column", gap:0, height:"100%", minHeight:380, overflow:"hidden" }}>
-      <div style={{ fontSize:10, fontWeight:700, color:"#999", letterSpacing:0.5, marginBottom:8, textAlign:"center" }}>PREVIEW</div>
+      <div style={{ fontSize:10, fontWeight:700, color:"#999", letterSpacing:0.5, marginBottom:4, textAlign:"center" }}>PREVIEW</div>
+      <div style={{ fontSize:9, color:"#bbb", textAlign:"center", marginBottom:6 }}>폴더 아이콘 = 폴더색 &nbsp;·&nbsp; 말풍선 = 말풍선색</div>
       <div style={{ flex:1, background:"#fff", borderRadius:8, border:`1px solid ${accent}40`, overflow:"hidden", display:"flex", flexDirection:"column", fontFamily:d.fontFamily }}>
         {/* titlebar */}
         <div style={{ background:d.accentLight, borderBottom:`1px solid ${accent}`, padding:"0 8px", height:28, display:"flex", alignItems:"center", gap:0, fontSize:10 }}>
@@ -116,27 +126,28 @@ function Preview({ d, folderOptions, onClickFolder }: { d: Design; folderOptions
         </div>
         {/* body */}
         <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
-          {/* sidebar */}
+          {/* sidebar — click folder icon to change folder color */}
           <div style={{ width:52, padding:"8px 4px", display:"flex", flexDirection:"column", gap:4, alignItems:"center", borderRight:`1px solid ${accent}20`, overflowY:"auto" }}>
-            {displayFolders.map((name, i) => (
-              <div key={i} onClick={() => onClickFolder(i)}
-                style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer" }}
-                title={`${name} 색 변경`}>
-                <FolderSvg size={16} color={d.folderColorPalette[i] ?? accent} />
-                <span style={{ fontSize:7, color:"#888", maxWidth:44, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center" }}>{name}</span>
-              </div>
-            ))}
+            {displayFolders.map((name, i) => {
+              const fc = d.folderColorPalette[i] ?? accent;
+              return (
+                <div key={i} style={{ position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer" }} title={`${name} 폴더색`}>
+                  <FolderSvg size={16} color={fc} />
+                  <span style={{ fontSize:7, color:"#888", maxWidth:44, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center" }}>{name}</span>
+                  <input type="color" value={fc} onChange={e => onChangeFolderColor(i, e.target.value)} style={colorInputStyle} />
+                </div>
+              );
+            })}
           </div>
-          {/* memos */}
+          {/* memos — click bubble to change bubble color */}
           <div style={{ flex:1, padding:"6px 8px", display:"flex", flexDirection:"column", gap:3, overflowY:"auto" }}>
             {displayFolders.map((name, i) => {
               const fc = d.folderColorPalette[i] ?? accent;
-              const bg = folderToBubbleColor(fc);
+              const bg = d.folderBubblePalette[i] || folderToBubbleColor(fc);
               return (
-                <div key={i} onClick={() => onClickFolder(i)}
-                  title={`${name} 말풍선 색 변경`}
-                  style={{ alignSelf:"flex-end", background:bg, border:`1px solid ${fc}40`, borderRadius:"8px 8px 1px 8px", padding:"5px 8px", fontSize:10, color:d.msgTextColor, maxWidth:"80%", cursor:"pointer" }}>
+                <div key={i} style={{ position:"relative", alignSelf:"flex-end", background:bg, border:`1px solid ${fc}40`, borderRadius:"8px 8px 1px 8px", padding:"5px 8px", fontSize:10, color:d.msgTextColor, maxWidth:"80%", cursor:"pointer" }} title={`${name} 말풍선색`}>
                   {name}
+                  <input type="color" value={bg.startsWith("#") ? bg : fc} onChange={e => onChangeBubbleColor(i, e.target.value)} style={colorInputStyle} />
                 </div>
               );
             })}
@@ -337,6 +348,9 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
   function setFolderColor(i: number, c: string) {
     setD(prev => { const pal = [...prev.folderColorPalette]; pal[i] = c; return { ...prev, folderColorPalette: pal }; });
   }
+  function setFolderBubbleColor(i: number, c: string) {
+    setD(prev => { const pal = [...(prev.folderBubblePalette ?? [])]; pal[i] = c; return { ...prev, folderBubblePalette: pal }; });
+  }
 
   function setField<K extends keyof Design>(k: K, v: Design[K]) {
     setD(prev => ({ ...prev, [k]: v }));
@@ -344,18 +358,6 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
 
   function handleNext() {
     onNext({ ...d, fontFamily: FONTS[fontIdx].css });
-  }
-
-  // Single hidden color input shared by every folder swatch — keyed by an
-  // index ref so there's no hard cap on the number of folders.
-  const colorInputRef = useRef<HTMLInputElement>(null);
-  const editingIdxRef = useRef(0);
-  function openFolderColor(i: number) {
-    editingIdxRef.current = i;
-    if (colorInputRef.current) {
-      colorInputRef.current.value = d.folderColorPalette[i] ?? "#e0e0e0";
-      colorInputRef.current.click();
-    }
   }
 
   return (
@@ -406,16 +408,14 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
               {(folderOptions.length ? folderOptions : ["폴더1","폴더2","폴더3","폴더4"]).map((name, i) => {
                 const color = d.folderColorPalette[i] ?? "#e0e0e0";
                 return (
-                  <div key={i} onClick={() => openFolderColor(i)}
-                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer", position:"relative" }}>
+                  <div key={i} style={{ position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer" }}>
                     <FolderSvg size={36} color={color} />
                     <span title={name} style={{ fontSize:9, color:"#888", maxWidth:60, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center" }}>{name}</span>
+                    <input type="color" value={color} onChange={e=>setFolderColor(i,e.target.value)} style={colorInputStyle} />
                   </div>
                 );
               })}
             </div>
-            <input ref={colorInputRef} type="color" onChange={e=>setFolderColor(editingIdxRef.current, e.target.value)}
-              style={{ position:"fixed", opacity:0, width:1, height:1, pointerEvents:"none", left:-9999, top:0 }} />
           </SectionCard>
 
           <SectionCard title="FONT">
@@ -446,7 +446,7 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
         </div>
 
         {/* RIGHT: PREVIEW */}
-        <Preview d={d} folderOptions={folderOptions} onClickFolder={openFolderColor} />
+        <Preview d={d} folderOptions={folderOptions} onChangeFolderColor={setFolderColor} onChangeBubbleColor={setFolderBubbleColor} />
       </div>
 
       {/* buttons */}

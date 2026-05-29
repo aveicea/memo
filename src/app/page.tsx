@@ -14,7 +14,7 @@ interface Memo {
 }
 interface Config {
   token: string; databaseId: string; title: string;
-  folderOptions: string[]; folderColorPalette: string[];
+  folderOptions: string[]; folderColorPalette: string[]; folderBubblePalette?: string[];
   fontFamily: string; accent: string;
   accentLight?: string; textColor?: string;
   msgBubbleBg?: string; msgTextColor?: string;
@@ -41,9 +41,7 @@ function hex2hsl(hex: string): [number, number, number] {
 function folderToBubbleColor(hex: string): string {
   if (!hex || !hex.startsWith("#") || hex.length < 7) return "var(--msg-bubble-color)";
   const [h, s] = hex2hsl(hex);
-  // Clear pastel tint of the folder color so folders are actually
-  // distinguishable — not a near-white wash where only the border shows.
-  return `hsl(${h}, ${Math.max(Math.min(s, 70), 35)}%, 90%)`;
+  return `hsl(${h}, ${Math.min(s * 0.4, 30)}%, 93%)`;
 }
 
 function buildCssVars(cfg: Config): string {
@@ -239,9 +237,10 @@ function ReplyBubble({ text, first, onReply }: { text: string; first: boolean; o
   );
 }
 
-function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle, onEdit, onReply }: {
+function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, onDelete, onToggle, onEdit, onReply }: {
   memo: Memo;
   folderColor?: string;
+  folderBubbleColor?: string;
   onPin: () => void; onImportant: () => void; onDelete: () => void;
   onToggle: (id: string, checked: boolean) => void;
   onEdit: (content: string) => void;
@@ -264,9 +263,7 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
   const isImportant = memo.important;
   const bubbleBg = isImportant
     ? "var(--reply-bubble-color)"
-    : folderColor
-      ? folderToBubbleColor(folderColor)
-      : "var(--msg-bubble-color)";
+    : folderBubbleColor || (folderColor ? folderToBubbleColor(folderColor) : "var(--msg-bubble-color)");
   const textColor = isImportant ? "var(--reply-text-color)" : "var(--msg-text-color)";
 
   function copyText() { navigator.clipboard.writeText(memo.content).catch(() => {}); }
@@ -773,6 +770,12 @@ export default function WidgetPage() {
     const i = cfg.folderOptions.indexOf(eff);
     return i >= 0 ? (cfg.folderColorPalette[i] ?? undefined) : undefined;
   };
+  const folderBubbleColor = (f: string): string | undefined => {
+    if (!cfg?.folderBubblePalette) return undefined;
+    const eff = f || defaultFolder;
+    const i = cfg.folderOptions.indexOf(eff);
+    return i >= 0 ? (cfg.folderBubblePalette[i] || undefined) : undefined;
+  };
 
   const sidebarItems: Array<{ type: "folder"|"pinned"|"important"|"empty"; label?: string; color?: string }> = [];
   folderList.forEach((f, i) => {
@@ -810,6 +813,7 @@ export default function WidgetPage() {
     return (
       <MemoBubble key={memo.id} memo={memo}
         folderColor={folderColor(memo.folder)}
+        folderBubbleColor={folderBubbleColor(memo.folder)}
         onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
         onImportant={() => updateMemo(memo.id, { important: !memo.important })}
         onDelete={() => deleteMemo(memo.id)}
