@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CONFIG_STORAGE_KEY, decodeConfig } from "@/lib/config";
 
@@ -90,7 +90,7 @@ const PinIcon = () => (
 
 const ReplyIcon = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <g transform="scale(-1 1) translate(-24 0)">
+    <g transform="scale(-1 -1) translate(-24 -24)">
       <polyline points="9 17 4 12 9 7"/>
       <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
     </g>
@@ -211,6 +211,32 @@ function PendingBubble() {
   );
 }
 
+function ReplyBubble({ text, first, onReply }: { text: string; first: boolean; onReply: () => void }) {
+  const [hover, setHover] = useState(false);
+  function copy() { navigator.clipboard.writeText(text).catch(() => {}); }
+  const iconBtn = { background: "none", border: "none", cursor: "pointer", padding: 2, color: "#bbb", lineHeight: 1, transition: "color 0.15s" } as const;
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ alignSelf: "flex-start", maxWidth: "85%", marginTop: first ? 6 : 3, display: "flex", alignItems: "center", gap: 3 }}>
+      <div style={{
+        background: "var(--reply-bubble-color)", padding: "8px 12px",
+        borderRadius: "12px 12px 12px 2px", fontSize: 13,
+        color: "var(--reply-text-color)", lineHeight: 1.4,
+        wordBreak: "break-word", whiteSpace: "pre-wrap", fontFamily: "inherit",
+      }}>{text}</div>
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", flexShrink: 0,
+        opacity: hover ? 1 : 0, pointerEvents: hover ? "auto" : "none", transition: "opacity 0.15s" }}>
+        <button onClick={onReply} title="답글" style={iconBtn}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")} onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}><ReplyIcon /></button>
+        <button onClick={copy} title="복사" style={iconBtn}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")} onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle, onEdit, onReply }: {
   memo: Memo;
   folderColor?: string;
@@ -220,9 +246,18 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
   onReply: () => void;
 }) {
   const [hover, setHover]       = useState(false);
+  const [showActions, setShowActions] = useState(false);
   const [editing, setEditing]   = useState(false);
   const [editText, setEditText] = useState(memo.content);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 답글/수정/삭제 row: only appears when hovering the bubble's right side, and
+  // with a small delay so it isn't twitchy when the cursor just passes over.
+  function scheduleActions(show: boolean) {
+    if (actionTimer.current) clearTimeout(actionTimer.current);
+    actionTimer.current = setTimeout(() => setShowActions(show), show ? 320 : 140);
+  }
 
   const isImportant = memo.important;
   const bubbleBg = isImportant
@@ -243,10 +278,18 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
     return (
       <div style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
         <div style={{ alignSelf: "flex-end", width: "85%", display: "flex", flexDirection: "column", gap: 6 }}>
-          <textarea ref={editRef} value={editText} onChange={e => setEditText(applyMarkdownShortcuts(e.target.value))}
-            onKeyDown={e => { if (e.key === "Enter" && e.metaKey) saveEdit(); if (e.key === "Escape") cancelEdit(); }}
-            className="y2k-input"
-            style={{ width: "100%", padding: "9px 14px", border: "1px solid var(--accent)", borderRadius: "12px 12px 2px 12px", fontSize: 13, color: "var(--msg-text-color)", lineHeight: 1.4, background: "var(--msg-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 72, outline: "none" }} />
+          <div style={{ position: "relative" }}>
+            <div aria-hidden style={{
+              position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+              padding: "9px 14px", fontSize: 13, fontFamily: "inherit", lineHeight: 1.4,
+              color: "var(--msg-text-color)", pointerEvents: "none",
+              whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden",
+            }}>{renderInputPreview(editText)}</div>
+            <textarea ref={editRef} value={editText} onChange={e => setEditText(applyMarkdownShortcuts(e.target.value))}
+              onKeyDown={e => { if (e.key === "Enter" && e.metaKey) saveEdit(); if (e.key === "Escape") cancelEdit(); }}
+              className="y2k-input"
+              style={{ display: "block", width: "100%", padding: "9px 14px", border: "1px solid var(--accent)", borderRadius: "12px 12px 2px 12px", fontSize: 13, color: "transparent", caretColor: "var(--msg-text-color)", lineHeight: 1.4, background: "var(--msg-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 72, outline: "none", boxSizing: "border-box" }} />
+          </div>
           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
             <button onClick={cancelEdit}
               style={{ background: "none", border: "1px solid var(--border-color)", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#aaa", cursor: "pointer", fontFamily: "inherit" }}>취소</button>
@@ -260,7 +303,7 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
 
   return (
     <div data-guestbook-entry-id={memo.id}
-      style={{ padding: "2px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: "default" }}>
+      style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: "default" }}>
 
       <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ alignSelf: "flex-end", display: "flex", flexDirection: "column", gap: 0 }}>
@@ -268,47 +311,49 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
         {/* ROW: left buttons + bubble — always hug the right edge */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
 
-          {/* LEFT ACTIONS: pin/heart then copy (rightmost) — collapse to 0 width when hidden so no gap */}
-          <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+          {/* LEFT ACTIONS: space reserved from the start so nothing reflows on hover */}
+          <div style={{ width: 66, flexShrink: 0, display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-end" }}>
             {/* PIN — hover (gray) or when active */}
-            <div style={{ maxWidth: (hover || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
-              <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                  color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-                onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
-              ><PinIcon /></button>
-            </div>
+            <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
+                color: memo.pinned ? "var(--accent)" : "#ccc",
+                opacity: (hover || memo.pinned) ? 1 : 0, pointerEvents: (hover || memo.pinned) ? "auto" : "none",
+                transition: "color 0.15s, opacity 0.15s" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+              onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
+            ><PinIcon /></button>
 
             {/* HEART — hover (gray) or when active */}
-            <div style={{ maxWidth: (hover || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
-              <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                  color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-                onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
-              >♥</button>
-            </div>
+            <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
+                color: memo.important ? "var(--accent)" : "#ccc",
+                opacity: (hover || memo.important) ? 1 : 0, pointerEvents: (hover || memo.important) ? "auto" : "none",
+                transition: "color 0.15s, opacity 0.15s", fontSize: 13 }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+              onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
+            >♥</button>
 
             {/* COPY — hover only, rightmost (next to bubble) */}
-            <div style={{ maxWidth: hover ? 22 : 0, overflow: "hidden", opacity: hover ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
-              <button onClick={copyText} title="복사"
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc", transition: "color 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
-              ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-            </div>
+            <button onClick={copyText} title="복사"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc",
+                opacity: hover ? 1 : 0, pointerEvents: hover ? "auto" : "none",
+                transition: "color 0.15s, opacity 0.15s" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
+            ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
           </div>
 
           {/* BUBBLE */}
-          <div style={{
-            background: bubbleBg, border: "none",
-            padding: "9px 14px", borderRadius: "12px 12px 2px 12px",
-            fontSize: 13, color: textColor, lineHeight: 1.4,
-            wordBreak: "break-word", whiteSpace: "pre-wrap",
-            boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
-            transition: "background 0.2s, color 0.2s",
-          }}>
+          <div onMouseEnter={() => scheduleActions(true)} onMouseLeave={() => scheduleActions(false)}
+            style={{
+              maxWidth: "75%",
+              background: bubbleBg, border: "none",
+              padding: "9px 14px", borderRadius: "12px 12px 2px 12px",
+              fontSize: 13, color: textColor, lineHeight: 1.4,
+              wordBreak: "break-word", whiteSpace: "pre-wrap",
+              boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
+              transition: "background 0.2s, color 0.2s",
+            }}>
             <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} />
             {memo.imageUrls.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 4, marginTop: memo.content.trim() ? 8 : 0 }}>
@@ -321,12 +366,13 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
           </div>
         </div>
 
-        {/* BELOW ACTIONS: 수정, 삭제 */}
-        <div style={{
-          alignSelf: "flex-end", display: "flex", gap: 1,
-          height: hover ? 20 : 0, overflow: "hidden",
-          transition: "height 0.15s",
-        }}>
+        {/* BELOW ACTIONS: 답글, 수정, 삭제 — right-side hover with a small delay */}
+        <div onMouseEnter={() => scheduleActions(true)} onMouseLeave={() => scheduleActions(false)}
+          style={{
+            alignSelf: "flex-end", display: "flex", gap: 1,
+            height: showActions ? 20 : 0, overflow: "hidden",
+            transition: "height 0.15s",
+          }}>
           {[
             { label: "답글", onClick: onReply, icon: <ReplyIcon /> },
             { label: "수정", onClick: startEdit,
@@ -348,16 +394,7 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
 
       {/* reply bubbles */}
       {memo.replies.map((r, i) => (
-        <div key={i} style={{ alignSelf: "flex-start", maxWidth: "80%", marginTop: i === 0 ? 6 : 2 }}>
-          <div style={{
-            background: "var(--reply-bubble-color)", padding: "8px 12px",
-            borderRadius: "12px 12px 12px 2px", fontSize: 13,
-            color: "var(--reply-text-color)", lineHeight: 1.4,
-            wordBreak: "break-word", whiteSpace: "pre-wrap", fontFamily: "inherit",
-          }}>
-            {r}
-          </div>
-        </div>
+        <ReplyBubble key={i} text={r} first={i === 0} onReply={onReply} />
       ))}
     </div>
   );
@@ -371,6 +408,7 @@ export default function WidgetPage() {
   const [loading, setLoading]       = useState(false);
   const [activeFolder, setFolder]   = useState("ALL");
   const [showSidebar, setShowSidebar] = useState(true);
+  const [minimized, setMinimized]   = useState(false);
   const [inputText, setInputText]   = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore]       = useState(false);
@@ -476,11 +514,13 @@ export default function WidgetPage() {
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   }, [inputText]);
 
-  // Restore cursor after Tab indentation
-  useEffect(() => {
+  // Restore cursor after Tab indentation / Shift+Enter list continuation.
+  // Layout effect runs before paint so the caret never visibly jumps.
+  useLayoutEffect(() => {
     if (cursorPosRef.current !== null && textareaRef.current) {
-      textareaRef.current.selectionStart = cursorPosRef.current;
-      textareaRef.current.selectionEnd   = cursorPosRef.current;
+      const pos = cursorPosRef.current;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(pos, pos);
       cursorPosRef.current = null;
     }
   }, [inputText]);
@@ -604,8 +644,20 @@ export default function WidgetPage() {
 
   async function toggleTodo(todoId: string, checked: boolean, memoId: string) {
     if (!cfg) return;
-    setMemos(prev => prev.map(m => m.id === memoId
-      ? { ...m, todos: m.todos.map(t => t.id === todoId ? { ...t, checked } : t) } : m));
+    setMemos(prev => prev.map(m => {
+      if (m.id !== memoId) return m;
+      const target = m.todos.find(t => t.id === todoId);
+      const todos = m.todos.map(t => t.id === todoId ? { ...t, checked } : t);
+      // The checkbox shown in the bubble is derived from `content`, so flip the
+      // matching line there too — otherwise clicking does nothing visually.
+      let content = m.content;
+      if (target) {
+        const from = `- [${checked ? " " : "x"}] ${target.text}`;
+        const to   = `- [${checked ? "x" : " "}] ${target.text}`;
+        content = content.replace(from, to);
+      }
+      return { ...m, todos, content };
+    }));
     await fetch(`/api/notion/blocks/${todoId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: cfg.token, checked }),
@@ -743,7 +795,8 @@ export default function WidgetPage() {
       <style>{cssVars}</style>
 
       <div className="y2k-widget" style={{
-        width:"100%", maxWidth:"100%", height:"100%",
+        width:"100%", maxWidth:"100%", height: minimized ? "auto" : "100%",
+        alignSelf: minimized ? "flex-start" : "stretch",
         background:"var(--bg-color)", borderRadius:0, border:"none", outline:"none",
         display:"flex", flexDirection:"column", overflow:"hidden",
         boxSizing:"border-box", fontFamily:"var(--widget-font-family, inherit)",
@@ -801,14 +854,14 @@ export default function WidgetPage() {
                 <path d="M16 16h5v5"/>
               </svg>
             </div>
-            <div className="y2k-win-btn"
-              style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>_</div>
+            <div className="y2k-win-btn" onClick={() => setMinimized(v => !v)} title={minimized ? "펼치기" : "최소화"}
+              style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>{minimized ? "□" : "_"}</div>
             <div className="y2k-win-btn" onClick={() => { localStorage.removeItem(CONFIG_STORAGE_KEY); router.push("/onboarding"); }}
               style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>x</div>
           </div>
         </div>
 
-        <div style={{ flex:1, minHeight:0, display:"flex", flexDirection:"row", overflow:"hidden" }}>
+        <div style={{ flex:1, minHeight:0, display: minimized ? "none" : "flex", flexDirection:"row", overflow:"hidden" }}>
 
           {/* Sidebar */}
           <div style={{ flexShrink:0, display:"flex", flexDirection:"row", alignItems:"stretch", overflow:"hidden" }}>
@@ -915,7 +968,7 @@ export default function WidgetPage() {
         <form onSubmit={sendMemo} style={{
           paddingBottom:8,
           borderTop:"1px dotted var(--border-dot)",
-          display:"flex", flexDirection:"column", background:"var(--bg-color)", flexShrink:0,
+          display: minimized ? "none" : "flex", flexDirection:"column", background:"var(--bg-color)", flexShrink:0,
         }}>
           {replyingMemo && (
             <div style={{

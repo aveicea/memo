@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, CheckCircle2 } from "lucide-react";
-import { CONFIG_STORAGE_KEY, buildShareUrl } from "@/lib/config";
+import { CONFIG_STORAGE_KEY, buildShareUrl, decodeConfig } from "@/lib/config";
 
 /* ── types ── */
 interface DB { id: string; title: string }
@@ -167,12 +167,30 @@ function Steps({ current }: { current: number }) {
 }
 
 /* ── step 1 ── */
-function Step1({ onNext }: { onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[]; folderProp?:string; pinnedProp?:string; importantProp?:string; replyProp?:string }) => void }) {
+function Step1({ onNext, onImport }: {
+  onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[]; folderProp?:string; pinnedProp?:string; importantProp?:string; replyProp?:string }) => void;
+  onImport: (c: Config) => void;
+}) {
   const [token, setToken]   = useState("");
   const [dbs, setDbs]       = useState<DB[]>([]);
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState("");
+  const [link, setLink]     = useState("");
+  const [linkError, setLinkError] = useState("");
+
+  function importLink() {
+    const raw = link.trim();
+    if (!raw) return;
+    // Accept a full share URL (…/?config=xxxx) or a bare encoded string.
+    let encoded = raw;
+    const idx = raw.indexOf("config=");
+    if (idx >= 0) encoded = raw.slice(idx + "config=".length).split("&")[0];
+    try { encoded = decodeURIComponent(encoded); } catch { /* already decoded */ }
+    const decoded = decodeConfig<Config>(encoded);
+    if (decoded?.token) { setLinkError(""); onImport(decoded); }
+    else setLinkError("올바른 설정 링크가 아니에요");
+  }
 
   async function fetchDBs() {
     if (!token.trim()) { setError("API 토큰을 입력해주세요"); return; }
@@ -245,14 +263,42 @@ function Step1({ onNext }: { onNext: (d: { token:string; databaseId:string; titl
           다음 →
         </button>
       )}
+
+      {/* import an existing config from a share link */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, margin:"4px 0" }}>
+        <div style={{ flex:1, height:1, background:"#F5C6D0" }} />
+        <span style={{ fontSize:11, color:"#C9A0B6" }}>또는 기존 설정 링크로</span>
+        <div style={{ flex:1, height:1, background:"#F5C6D0" }} />
+      </div>
+      <div>
+        <label style={{ display:"block", marginBottom:8, fontSize:12, fontWeight:600, color:"#999" }}>설정 링크 붙여넣기</label>
+        <div style={{ display:"flex", gap:6 }}>
+          <input value={link} onChange={e=>{setLink(e.target.value);setLinkError("");}} onKeyDown={e=>e.key==="Enter"&&importLink()}
+            placeholder="https://…/?config=…" className="y2k-input"
+            style={{ flex:1, padding:12, border:"1px solid #F5C6D0", background:"#FFF5F9", fontSize:13, color:"#333", borderRadius:10, fontFamily:"inherit", boxSizing:"border-box" }} />
+          <button onClick={importLink} disabled={!link.trim()}
+            style={{ flexShrink:0, padding:"0 18px", fontSize:13, fontWeight:600, background:link.trim()?"#fff":"#f5f5f5", color:"#E8A8C0", border:"1px solid #F5C6D0", borderRadius:10, cursor:link.trim()?"pointer":"not-allowed", fontFamily:"inherit" }}>
+            불러오기
+          </button>
+        </div>
+        {linkError && <p style={{ fontSize:12, color:"#e53e3e", marginTop:8 }}>{linkError}</p>}
+        <p style={{ fontSize:11, color:"#bbb", marginTop:8, lineHeight:1.5 }}>이전에 만든 설정 링크를 붙여넣으면 그대로 불러와 수정할 수 있어요.</p>
+      </div>
     </div>
   );
 }
 
 /* ── step 2 ── */
-function Step2({ folderOptions, onNext, onBack }: { folderOptions: string[]; onNext: (d: Design) => void; onBack: () => void }) {
-  const [d, setD] = useState<Design>({ ...DEFAULT_DESIGN, folderColorPalette: [...DEFAULT_DESIGN.folderColorPalette] });
-  const [fontIdx, setFontIdx] = useState(0);
+function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: string[]; initial?: Design; onNext: (d: Design) => void; onBack: () => void }) {
+  const [d, setD] = useState<Design>(
+    initial
+      ? { ...initial, folderColorPalette: [...initial.folderColorPalette] }
+      : { ...DEFAULT_DESIGN, folderColorPalette: [...DEFAULT_DESIGN.folderColorPalette] }
+  );
+  const [fontIdx, setFontIdx] = useState(() => {
+    const i = FONTS.findIndex(f => f.css === initial?.fontFamily);
+    return i >= 0 ? i : 0;
+  });
 
   function applyPreset(p: typeof PRESETS[0]) {
     setD({ ...p, folderColorPalette: [...p.folderColorPalette] });
@@ -317,14 +363,14 @@ function Step2({ folderOptions, onNext, onBack }: { folderOptions: string[]; onN
         {/* MIDDLE: FOLDER COLORS + FONT + 답글/중요 */}
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <SectionCard title="FOLDER COLORS">
-            <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"8px 4px" }}>
-              {Array.from({ length: 8 }, (_, i) => {
+            <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 4px" }}>
+              {(folderOptions.length ? folderOptions.slice(0, 8) : ["폴더1","폴더2","폴더3","폴더4"]).map((name, i) => {
                 const color = d.folderColorPalette[i] ?? "#e0e0e0";
                 return (
                   <div key={i} onClick={() => folderRefs[i].current?.click()}
                     style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer", position:"relative" }}>
                     <FolderSvg size={36} color={color} />
-                    <span style={{ fontSize:9, color:"#bbb" }}>{i+1}</span>
+                    <span title={name} style={{ fontSize:9, color:"#888", maxWidth:60, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center" }}>{name}</span>
                     <input ref={folderRefs[i]} type="color" value={color} onChange={e=>setFolderColor(i,e.target.value)}
                       style={{ position:"absolute", opacity:0, width:1, height:1, pointerEvents:"none" }} />
                   </div>
@@ -451,6 +497,12 @@ export default function OnboardingPage() {
     setConfig(prev => ({ ...prev, ...d }));
     setStep(2);
   }
+  function handleImport(c: Config) {
+    // A pasted share link fully populates the config; jump to design so the
+    // user can review/edit, then land on the completion + new-link screen.
+    setConfig({ ...c, folderColorPalette: [...(c.folderColorPalette ?? DEFAULT_DESIGN.folderColorPalette)] });
+    setStep(2);
+  }
   function handleStep2(d: Design) {
     setConfig(prev => ({ ...prev, ...d }));
     setStep(3);
@@ -462,8 +514,8 @@ export default function OnboardingPage() {
         <TitleBar />
         <div style={{ padding: step===2 ? "52px 52px 40px" : "52px 52px 40px" }}>
           <Steps current={step} />
-          {step===1 && <Step1 onNext={handleStep1} />}
-          {step===2 && <Step2 folderOptions={config.folderOptions} onNext={handleStep2} onBack={() => setStep(1)} />}
+          {step===1 && <Step1 onNext={handleStep1} onImport={handleImport} />}
+          {step===2 && <Step2 folderOptions={config.folderOptions} initial={config} onNext={handleStep2} onBack={() => setStep(1)} />}
           {step===3 && <Step3 config={config} onBack={() => setStep(2)} />}
         </div>
       </div>

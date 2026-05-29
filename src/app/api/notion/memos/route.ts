@@ -124,7 +124,10 @@ export async function GET(req: NextRequest) {
 
     const memos = await Promise.all(
       data.results.map(async (page: Record<string, unknown>) => {
-        const props = page.properties as Record<string, { type: string; select?: { name: string }; checkbox?: boolean; rich_text?: RT[] }>;
+        const props = page.properties as Record<string, {
+          type: string; select?: { name: string }; checkbox?: boolean; rich_text?: RT[];
+          files?: Array<{ type: string; file?: { url: string }; external?: { url: string } }>;
+        }>;
 
         const bRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, { headers: hdrs(token) });
         const bData = await bRes.json();
@@ -136,11 +139,23 @@ export async function GET(req: NextRequest) {
         const replyStr = replyProp ? (props[replyProp]?.rich_text ?? []).map((r: RT) => r.plain_text).join("") : "";
         const replies = replyStr ? replyStr.split("|||").filter(Boolean) : [];
 
+        // Pull images both from image blocks in the page body AND from any
+        // "files" property on the page (e.g. an "이미지"/"첨부" column).
+        const propFileUrls: string[] = [];
+        for (const v of Object.values(props)) {
+          if (v?.type === "files" && Array.isArray(v.files)) {
+            for (const f of v.files) {
+              const url = f.type === "external" ? f.external?.url : f.file?.url;
+              if (url && /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?|$)/i.test(url)) propFileUrls.push(url);
+            }
+          }
+        }
+
         return {
           id: page.id,
           content: parseBlocksToContent(rawBlocks),
           todos: parseBlocksToTodos(rawBlocks),
-          imageUrls: parseBlocksToImageUrls(rawBlocks),
+          imageUrls: [...parseBlocksToImageUrls(rawBlocks), ...propFileUrls],
           createdAt: parseDate(page.created_time as string),
           replies, pinned, important, folder,
         };
