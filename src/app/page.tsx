@@ -120,33 +120,38 @@ function parseLines(content: string) {
 
 function renderInputPreview(text: string): React.ReactNode {
   return text.split("\n").map((line, i) => {
-    const indentCount = line.match(/^( *)/)?.[1]?.length ?? 0;
-    const indent = Math.floor(indentCount / 2);
-    const pad = indent * 14;
-    const trimmed = line.trimStart();
-    const todo = trimmed.match(/^- \[(x| )\] ?(.*)/);
+    const leading = line.match(/^(\s*)/)?.[1] ?? "";
+    const rest = line.slice(leading.length);
+    // Reserve the indent as the *actual* leading spaces (invisible) so the
+    // overlay is character-for-character identical to the textarea — using
+    // paddingLeft instead would drift the caret on indented lines.
+    const indentSpan = leading ? <span style={{ whiteSpace: "pre", flexShrink: 0 }}>{leading}</span> : null;
+    const todo = rest.match(/^(- \[(x| )\] ?)(.*)$/);
     if (todo) return (
-      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
-        {/* invisible raw prefix reserves the exact same width as the textarea text */}
+      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
+        {indentSpan}
+        {/* invisible raw marker reserves the exact same width as the textarea */}
         <span style={{ position: "relative", flexShrink: 0 }}>
-          <span style={{ opacity: 0, whiteSpace: "pre" }}>{todo[1]==="x" ? "- [x] " : "- [ ] "}</span>
-          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: todo[1]==="x" ? 0.35 : 0.6 }}>
+          <span style={{ opacity: 0, whiteSpace: "pre" }}>{todo[1]}</span>
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: todo[2]==="x" ? 0.35 : 0.6 }}>
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
-              {todo[1]==="x" && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
+              {todo[2]==="x" && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
             </svg>
           </span>
         </span>
-        <span style={{ textDecoration: todo[1]==="x" ? "line-through" : "none", opacity: todo[1]==="x" ? 0.4 : 1 }}>{todo[2]}</span>
+        <span style={{ textDecoration: todo[2]==="x" ? "line-through" : "none", opacity: todo[2]==="x" ? 0.4 : 1 }}>{todo[3]}</span>
       </div>
     );
-    if (trimmed.startsWith("- ")) return (
-      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
+    const bullet = rest.match(/^(- )(.*)$/);
+    if (bullet) return (
+      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
+        {indentSpan}
         <span style={{ position: "relative", flexShrink: 0 }}>
-          <span style={{ opacity: 0, whiteSpace: "pre" }}>{"- "}</span>
+          <span style={{ opacity: 0, whiteSpace: "pre" }}>{bullet[1]}</span>
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.5, fontSize: 11 }}>•</span>
         </span>
-        <span>{trimmed.slice(2)}</span>
+        <span>{bullet[2]}</span>
       </div>
     );
     return <div key={i} style={{ minHeight: "1.5em" }}>{line || <>&nbsp;</>}</div>;
