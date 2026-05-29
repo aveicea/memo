@@ -72,7 +72,6 @@ export async function GET(req: NextRequest) {
       data.results.map(async (page: Record<string, unknown>) => {
         const props = page.properties as Record<string, { type: string; select?: { name: string }; checkbox?: boolean; rich_text?: RT[] }>;
 
-        // get page blocks for content
         const bRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, {
           headers: headers(token),
         });
@@ -84,14 +83,15 @@ export async function GET(req: NextRequest) {
         const folder = folderProp && props[folderProp]?.select?.name ? props[folderProp].select!.name : "";
         const pinned = pinnedProp ? (props[pinnedProp]?.checkbox ?? false) : false;
         const important = importantProp ? (props[importantProp]?.checkbox ?? false) : false;
-        const reply = replyProp ? (props[replyProp]?.rich_text ?? []).map((r: RT) => r.plain_text).join("") || undefined : undefined;
+        const replyStr = replyProp ? (props[replyProp]?.rich_text ?? []).map((r: RT) => r.plain_text).join("") : "";
+        const replies = replyStr ? replyStr.split("|||").filter(Boolean) : [];
 
         return {
           id: page.id,
           content,
           todos,
           createdAt: parseDate(page.created_time as string),
-          reply,
+          replies,
           pinned,
           important,
           folder,
@@ -109,7 +109,6 @@ export async function POST(req: NextRequest) {
   try {
     const { token, databaseId, content, folder, folderProp, pinnedProp, importantProp } = await req.json();
 
-    // Build blocks from content string
     const lines = (content as string).split("\n");
     const children = lines
       .filter(l => l.trim() !== "")

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 interface Todo { id: string; checked: boolean; text: string }
 interface Memo {
   id: string; content: string; todos: Todo[];
-  createdAt: string; reply?: string;
+  createdAt: string; replies: string[];
   pinned: boolean; important: boolean; folder: string;
 }
 interface Config {
@@ -21,7 +21,6 @@ interface Config {
   importantProp?: string; replyProp?: string;
 }
 
-/* ── color helpers ── */
 function hex2hsl(hex: string): [number, number, number] {
   const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
   const max = Math.max(r,g,b), min = Math.min(r,g,b);
@@ -34,6 +33,12 @@ function hex2hsl(hex: string): [number, number, number] {
   else if (max===g) h = ((b-r)/d+2)/6;
   else h = ((r-g)/d+4)/6;
   return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
+}
+
+function folderToBubbleColor(hex: string): string {
+  if (!hex || !hex.startsWith("#") || hex.length < 7) return "var(--msg-bubble-color)";
+  const [h, s] = hex2hsl(hex);
+  return `hsl(${h}, ${Math.min(s, 45)}%, 91%)`;
 }
 
 function buildCssVars(cfg: Config): string {
@@ -64,14 +69,12 @@ function buildCssVars(cfg: Config): string {
   `;
 }
 
-/* ── folder SVG ── */
 const FolderIcon = ({ size=25, fill, stroke }: { size?: number; fill: string; stroke: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>
   </svg>
 );
 
-/* ── pin SVG ── */
 const PinIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 17v5"/>
@@ -79,7 +82,15 @@ const PinIcon = () => (
   </svg>
 );
 
-/* ── content parser ── */
+const ReplyIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <g transform="scale(-1 1) translate(-24 0)">
+      <polyline points="9 17 4 12 9 7"/>
+      <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
+    </g>
+  </svg>
+);
+
 function parseLines(content: string) {
   return content.split("\n").map(line => {
     const m = line.match(/^- \[(x| )\] (.+)/);
@@ -88,7 +99,6 @@ function parseLines(content: string) {
   });
 }
 
-/* ── memo content ── */
 function MemoContent({ content, todos, onToggle }: {
   content: string; todos: Todo[];
   onToggle: (id: string, checked: boolean) => void;
@@ -132,44 +142,73 @@ function MemoContent({ content, todos, onToggle }: {
   );
 }
 
-/* ── memo bubble ── */
-function MemoBubble({ memo, onPin, onImportant, onDelete, onToggle }: {
+function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle, onEdit, onReply }: {
   memo: Memo;
+  folderColor?: string;
   onPin: () => void; onImportant: () => void; onDelete: () => void;
   onToggle: (id: string, checked: boolean) => void;
+  onEdit: (content: string) => void;
+  onReply: () => void;
 }) {
-  const [hover, setHover] = useState(false);
+  const [hover, setHover]       = useState(false);
+  const [editing, setEditing]   = useState(false);
+  const [editText, setEditText] = useState(memo.content);
+  const editRef = useRef<HTMLTextAreaElement>(null);
 
   const isImportant = memo.important;
-  const bubbleBg    = isImportant ? "var(--reply-bubble-color)" : "var(--msg-bubble-color)";
-  const textColor   = isImportant ? "var(--reply-text-color)"  : "var(--msg-text-color)";
+  const bubbleBg = isImportant
+    ? "var(--reply-bubble-color)"
+    : folderColor
+      ? folderToBubbleColor(folderColor)
+      : "var(--msg-bubble-color)";
+  const textColor = isImportant ? "var(--reply-text-color)" : "var(--msg-text-color)";
 
   function copyText() { navigator.clipboard.writeText(memo.content).catch(() => {}); }
+  function startEdit() { setEditText(memo.content); setEditing(true); setTimeout(() => editRef.current?.focus(), 30); }
+  function saveEdit() { if (editText.trim() && editText.trim() !== memo.content) onEdit(editText.trim()); setEditing(false); }
+  function cancelEdit() { setEditText(memo.content); setEditing(false); }
+
+  if (editing) {
+    return (
+      <div style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ alignSelf: "flex-end", width: "85%", display: "flex", flexDirection: "column", gap: 6 }}>
+          <textarea ref={editRef} value={editText} onChange={e => setEditText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && e.metaKey) saveEdit(); if (e.key === "Escape") cancelEdit(); }}
+            className="y2k-input"
+            style={{ width: "100%", padding: "9px 14px", border: "1px solid var(--accent)", borderRadius: "12px 12px 2px 12px", fontSize: 13, color: "var(--msg-text-color)", lineHeight: 1.4, background: "var(--msg-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 72, outline: "none" }} />
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+            <button onClick={cancelEdit}
+              style={{ background: "none", border: "1px solid var(--border-color)", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#aaa", cursor: "pointer", fontFamily: "inherit" }}>취소</button>
+            <button onClick={saveEdit}
+              style={{ background: "var(--accent)", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>저장</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div data-guestbook-entry-id={memo.id} draggable
+    <div data-guestbook-entry-id={memo.id}
       style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4, animation: "y2kFadeIn 0.3s ease", cursor: "default" }}>
 
       <div style={{ alignSelf: "flex-end", position: "relative", maxWidth: "85%" }}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
 
-        {/* always-visible pin/important badges */}
         {(memo.pinned || memo.important) && (
           <div style={{ position: "absolute", right: "100%", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 4, paddingRight: 4 }}>
             {memo.pinned && (
               <button onClick={onPin} title="고정 해제"
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "var(--accent)", opacity: 1, transition: "color 0.15s, transform 0.15s, opacity 0.15s", transform: "scale(1.1)" }}>
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "var(--accent)" }}>
                 <PinIcon />
               </button>
             )}
             {memo.important && (
               <button onClick={onImportant} title="중요 해제"
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, fontSize: 13, color: "var(--accent)", opacity: 1, transition: "color 0.15s, transform 0.15s, opacity 0.15s", transform: "scale(1.1)" }}>♥</button>
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, fontSize: 13, color: "var(--accent)" }}>♥</button>
             )}
           </div>
         )}
 
-        {/* bubble */}
         <div style={{
           background: bubbleBg, border: "none",
           padding: "9px 14px", borderRadius: "12px 12px 2px 12px",
@@ -180,7 +219,6 @@ function MemoBubble({ memo, onPin, onImportant, onDelete, onToggle }: {
         }}>
           <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} />
 
-          {/* hover actions */}
           {hover && (
             <div style={{
               position: "absolute", top: -30, right: 0,
@@ -190,14 +228,12 @@ function MemoBubble({ memo, onPin, onImportant, onDelete, onToggle }: {
               boxShadow: "0 2px 8px rgba(0,0,0,0.08)", zIndex: 10,
             }}>
               {[
-                { title: memo.pinned ? "고정 해제" : "고정", onClick: onPin,
-                  icon: <PinIcon /> },
-                { title: memo.important ? "중요 해제" : "중요", onClick: onImportant,
-                  icon: <span style={{ fontSize: 12 }}>♥</span> },
-                { title: "복사", onClick: copyText,
-                  icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> },
-                { title: "삭제", onClick: onDelete,
-                  icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> },
+                { title: memo.pinned ? "고정 해제" : "고정", onClick: onPin, icon: <PinIcon /> },
+                { title: memo.important ? "중요 해제" : "중요", onClick: onImportant, icon: <span style={{ fontSize: 12 }}>♥</span> },
+                { title: "답글", onClick: onReply, icon: <ReplyIcon /> },
+                { title: "수정", onClick: startEdit, icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
+                { title: "복사", onClick: copyText, icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> },
+                { title: "삭제", onClick: onDelete, icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> },
               ].map(a => (
                 <button key={a.title} onClick={a.onClick} title={a.title}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#aaa", lineHeight: 1, transition: "color 0.15s" }}
@@ -210,36 +246,35 @@ function MemoBubble({ memo, onPin, onImportant, onDelete, onToggle }: {
         </div>
       </div>
 
-      {/* reply bubble */}
-      {memo.reply && (
-        <div style={{ alignSelf: "flex-start", display: "flex", flexDirection: "column", alignItems: "flex-start", maxWidth: "85%", marginTop: 2 }}>
-          <div className="y2k-reply" style={{
+      {memo.replies.map((r, i) => (
+        <div key={i} style={{ alignSelf: "flex-start", maxWidth: "85%", marginTop: i === 0 ? 2 : 3 }}>
+          <div style={{
             background: "var(--reply-bubble-color)", padding: "9px 14px",
             borderRadius: "12px 12px 12px 2px", fontSize: 13,
             color: "var(--reply-text-color)", lineHeight: 1.4,
             wordBreak: "break-word", whiteSpace: "pre-wrap", fontFamily: "inherit",
           }}>
-            {memo.reply}
+            {r}
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
 
-/* ── main ── */
 export default function WidgetPage() {
   const router = useRouter();
-  const [cfg, setCfg]           = useState<Config | null>(null);
+  const [cfg, setCfg]             = useState<Config | null>(null);
   const [cfgLoaded, setCfgLoaded] = useState(false);
-  const [memos, setMemos]       = useState<Memo[]>([]);
-  const [loading, setLoading]   = useState(false);
+  const [memos, setMemos]         = useState<Memo[]>([]);
+  const [loading, setLoading]     = useState(false);
   const [activeFolder, setFolder] = useState("ALL");
   const [showSidebar, setShowSidebar] = useState(true);
   const [inputText, setInputText] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore]   = useState(false);
-  const [sending, setSending]   = useState(false);
+  const [hasMore, setHasMore]     = useState(false);
+  const [sending, setSending]     = useState(false);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef   = useRef<HTMLDivElement>(null);
 
@@ -248,6 +283,10 @@ export default function WidgetPage() {
     if (raw) setCfg(JSON.parse(raw));
     setCfgLoaded(true);
   }, []);
+
+  useEffect(() => {
+    setShowSidebar(activeFolder === "ALL");
+  }, [activeFolder]);
 
   const accent     = cfg?.accent ?? "#E8A8C0";
   const fontFamily = cfg?.fontFamily ?? "'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif";
@@ -268,7 +307,12 @@ export default function WidgetPage() {
       const r = await fetch(`/api/notion/memos?${q}`);
       const d = await r.json();
       if (cursor) {
+        const scrollEl = scrollRef.current;
+        const prevScrollHeight = scrollEl?.scrollHeight ?? 0;
         setMemos(prev => [...d.memos, ...prev]);
+        setTimeout(() => {
+          if (scrollEl) scrollEl.scrollTop += scrollEl.scrollHeight - prevScrollHeight;
+        }, 0);
       } else {
         setMemos(d.memos ?? []);
         setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 60);
@@ -294,9 +338,25 @@ export default function WidgetPage() {
   async function sendMemo(e: React.FormEvent) {
     e.preventDefault();
     if (!inputText.trim() || !cfg || sending) return;
+    const text = inputText.trim();
     setSending(true);
-    const content = inputText.trim();
     setInputText("");
+
+    if (replyingTo) {
+      const id = replyingTo;
+      setReplyingTo(null);
+      try {
+        const memo = memos.find(m => m.id === id);
+        const newReplies = [...(memo?.replies ?? []), text];
+        setMemos(prev => prev.map(m => m.id === id ? { ...m, replies: newReplies } : m));
+        await fetch(`/api/notion/memos/${id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: cfg.token, replyProp: cfg.replyProp, reply: newReplies.join("|||") }),
+        });
+      } finally { setSending(false); }
+      return;
+    }
+
     try {
       const targetFolder =
         activeFolder === "ALL" || activeFolder === "고정" || activeFolder === "중요"
@@ -304,14 +364,14 @@ export default function WidgetPage() {
           : activeFolder;
       const r = await fetch("/api/notion/memos", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: cfg.token, databaseId: cfg.databaseId, content, folder: targetFolder, folderProp: cfg.folderProp, pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp }),
+        body: JSON.stringify({ token: cfg.token, databaseId: cfg.databaseId, content: text, folder: targetFolder, folderProp: cfg.folderProp, pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp }),
       });
       const d = await r.json();
       if (d.id) {
         const now = new Date();
         const pad = (n: number) => String(n).padStart(2,"0");
         const createdAt = `${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        const newMemo: Memo = { id: d.id, content, todos: [], createdAt, pinned: false, important: false, folder: targetFolder };
+        const newMemo: Memo = { id: d.id, content: text, todos: [], createdAt, replies: [], pinned: false, important: false, folder: targetFolder };
         setMemos(prev => [...prev, newMemo]);
         setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 60);
       }
@@ -336,6 +396,15 @@ export default function WidgetPage() {
     });
   }
 
+  async function editMemo(id: string, content: string) {
+    if (!cfg) return;
+    setMemos(prev => prev.map(m => m.id === id ? { ...m, content } : m));
+    await fetch(`/api/notion/memos/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: cfg.token, content }),
+    });
+  }
+
   async function toggleTodo(todoId: string, checked: boolean, memoId: string) {
     if (!cfg) return;
     setMemos(prev => prev.map(m => m.id === memoId
@@ -354,25 +423,26 @@ export default function WidgetPage() {
 
   const folderList = cfg?.folderOptions ?? [];
 
-  const filteredMemos = activeFolder === "ALL"   ? memos
-    : activeFolder === "고정"  ? memos.filter(m => m.pinned)
-    : activeFolder === "중요"  ? memos.filter(m => m.important)
+  const filteredMemos = activeFolder === "ALL"  ? memos
+    : activeFolder === "고정" ? memos.filter(m => m.pinned)
+    : activeFolder === "중요" ? memos.filter(m => m.important)
     : memos.filter(m => m.folder === activeFolder);
 
-  const folderColor = (f: string) => {
-    if (!cfg) return "var(--accent)";
+  const folderColor = (f: string): string | undefined => {
+    if (!cfg || !f) return undefined;
     const i = cfg.folderOptions.indexOf(f);
-    return i >= 0 ? (cfg.folderColorPalette[i] ?? "var(--accent)") : "var(--accent)";
+    return i >= 0 ? (cfg.folderColorPalette[i] ?? undefined) : undefined;
   };
 
-  /* sidebar grid items: folders in left col, 고정 at right row1, 중요 at right row2 */
   const sidebarItems: Array<{ type: "folder"|"pinned"|"important"|"empty"; label?: string; color?: string }> = [];
   folderList.forEach((f, i) => {
-    sidebarItems.push({ type: "folder", label: f, color: folderColor(f) });
+    sidebarItems.push({ type: "folder", label: f, color: cfg ? (cfg.folderColorPalette[i] ?? "var(--accent)") : "var(--accent)" });
     if (i === 0) sidebarItems.push({ type: "pinned" });
     else if (i === 1) sidebarItems.push({ type: "important" });
     else sidebarItems.push({ type: "empty" });
   });
+
+  const replyingMemo = replyingTo ? memos.find(m => m.id === replyingTo) : null;
 
   return (
     <div style={{
@@ -389,7 +459,6 @@ export default function WidgetPage() {
         boxSizing:"border-box", fontFamily:"var(--widget-font-family, inherit)",
       }}>
 
-        {/* ── titlebar ── */}
         <div style={{
           height:35, background:"var(--accent-light)",
           borderBottom:"1px solid var(--accent)",
@@ -398,20 +467,16 @@ export default function WidgetPage() {
         }}>
           <div style={{ display:"flex", gap:4, alignItems:"center", flex:1, minWidth:0, overflow:"hidden" }}>
             <div style={{ display:"flex", alignItems:"center", gap:0, fontSize:12, fontWeight:600, fontFamily:"inherit", minWidth:0, flex:1 }}>
-              {/* sidebar toggle */}
               <button className="y2k-folder-btn" onClick={() => setShowSidebar(v => !v)} title="폴더 숨기기"
                 style={{ background:"none", border:"none", cursor:"pointer", padding:"0 5px 0 2px", lineHeight:"35px", height:35, display:"flex", alignItems:"center", color:"var(--accent)", opacity:0.7, transition:"opacity 0.15s", flexShrink:0 }}>
                 <FolderIcon size={14} fill="currentColor" stroke="currentColor" />
               </button>
 
-              {/* folder tabs */}
               <div className="y2k-folder-tabs" style={{ display:"flex", alignItems:"center", flex:1, minWidth:0, overflowX:"auto" }}>
-                {/* ALL tab */}
                 <button className="y2k-folder-btn" onClick={() => setFolder("ALL")}
                   style={{ background:"none", border:"none", cursor:"pointer", padding:"0 9px", fontSize:12, fontWeight: activeFolder==="ALL" ? 700 : 500, fontFamily:"inherit", color:"var(--text-color)", opacity: activeFolder==="ALL" ? 1 : 0.55, lineHeight:"35px", height:35, borderRadius:0, transition:"all 0.15s", flexShrink:0, whiteSpace:"nowrap" }}>
                   ALL
                 </button>
-                {/* folder tabs */}
                 {folderList.map(f => (
                   <div key={f} style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
                     <span style={{ color:"var(--accent)", opacity:0.3, fontSize:9 }}>|</span>
@@ -421,7 +486,6 @@ export default function WidgetPage() {
                     </button>
                   </div>
                 ))}
-                {/* 고정 tab */}
                 <div style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
                   <span style={{ color:"var(--accent)", opacity:0.3, fontSize:9 }}>|</span>
                   <button className="y2k-folder-btn" onClick={() => setFolder("고정")}
@@ -430,7 +494,6 @@ export default function WidgetPage() {
                     <span style={{ fontSize:10, fontFamily:"inherit", fontWeight:500 }}>고정</span>
                   </button>
                 </div>
-                {/* 중요 tab */}
                 <div style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
                   <span style={{ color:"var(--accent)", opacity:0.3, fontSize:9 }}>|</span>
                   <button className="y2k-folder-btn" onClick={() => setFolder("중요")}
@@ -443,7 +506,6 @@ export default function WidgetPage() {
             </div>
           </div>
 
-          {/* window buttons */}
           <div style={{ display:"flex", gap:4, alignItems:"center" }}>
             <div className="y2k-win-btn" onClick={() => loadMemos()} title="새로고침"
               style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>
@@ -461,10 +523,8 @@ export default function WidgetPage() {
           </div>
         </div>
 
-        {/* ── body ── */}
         <div style={{ flex:1, minHeight:0, display:"flex", flexDirection:"row", overflow:"hidden" }}>
 
-          {/* sidebar */}
           <div style={{ flexShrink:0, display:"flex", flexDirection:"row", alignItems:"stretch", overflow:"hidden" }}>
             <div style={{
               width: showSidebar ? 110 : 0,
@@ -479,19 +539,17 @@ export default function WidgetPage() {
                 if (item.type === "empty") return <div key={i} />;
                 const isSpecial = item.type === "pinned" || item.type === "important";
                 const label = item.type === "pinned" ? "고정" : item.type === "important" ? "중요" : item.label!;
-                const color = isSpecial ? "var(--accent)" : (item.type === "important" ? "var(--accent-light)" : item.color!);
-                const isRight = isSpecial;
+                const color = isSpecial ? "var(--accent)" : item.color!;
                 const isActive = activeFolder === label;
-                const onClick = () => setFolder(label);
                 return (
                   <div key={i} className="y2k-folder-btn"
-                    onClick={onClick}
+                    onClick={() => setFolder(label)}
                     style={{
                       display:"flex", flexDirection:"column", alignItems:"center", gap:1,
                       padding:"3px 4px", borderRadius:0, cursor:"pointer",
                       pointerEvents:"auto", background:"transparent",
                       transition:"background 0.15s, transform 0.15s",
-                      ...(isRight ? { justifySelf:"end" } : {}),
+                      ...(isSpecial ? { justifySelf:"end" } : {}),
                     }}>
                     <div style={{ pointerEvents:"none", opacity: isActive ? 1 : 0.7 }}>
                       <FolderIcon size={25} fill={color} stroke={color} />
@@ -517,15 +575,14 @@ export default function WidgetPage() {
             )}
           </div>
 
-          {/* memo list */}
           <div ref={scrollRef} className="y2k-scroll"
             style={{ flex:1, minHeight:0, overflowY:"auto", padding:"10px 14px 10px 8px" }}>
 
-            {hasMore && (
+            {memos.length > 0 && hasMore && (
               <div style={{ textAlign:"center", padding:"4px 0 8px" }}>
                 <button onClick={() => nextCursor && loadMemos(nextCursor)} disabled={loading}
                   style={{ background:"none", border:"1px dashed var(--accent)", borderRadius:8, padding:"4px 18px", fontSize:11, color:"var(--accent)", cursor:"pointer", fontFamily:"inherit", opacity:0.65 }}>
-                  {loading ? "..." : "이전 메모 불러오기"}
+                  {loading ? "..." : "…"}
                 </button>
               </div>
             )}
@@ -545,58 +602,79 @@ export default function WidgetPage() {
 
             {filteredMemos.map(memo => (
               <MemoBubble key={memo.id} memo={memo}
+                folderColor={folderColor(memo.folder)}
                 onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
                 onImportant={() => updateMemo(memo.id, { important: !memo.important })}
                 onDelete={() => deleteMemo(memo.id)}
                 onToggle={(tid, checked) => toggleTodo(tid, checked, memo.id)}
+                onEdit={(content) => editMemo(memo.id, content)}
+                onReply={() => { setReplyingTo(memo.id); setTimeout(() => textareaRef.current?.focus(), 50); }}
               />
             ))}
           </div>
         </div>
 
-        {/* ── input form ── */}
         <form onSubmit={sendMemo} style={{
-          padding:"8px", paddingBottom:8,
+          paddingBottom:8,
           borderTop:"1px dotted var(--border-dot)",
-          display:"flex", gap:6, background:"var(--bg-color)", flexShrink:0, alignItems:"flex-end",
+          display:"flex", flexDirection:"column", background:"var(--bg-color)", flexShrink:0,
         }}>
-          <button type="button" title="이미지 첨부"
-            style={{ width:32, height:32, border:"1px solid var(--accent-light)", borderRadius:4, background:"var(--bg-color)", color:"var(--accent)", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0, cursor:"pointer", opacity:0.75, transition:"opacity 0.15s, border-color 0.15s" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-          </button>
-          <input type="file" accept="image/*" multiple style={{ display:"none" }} />
-
-          <textarea ref={textareaRef} value={inputText}
-            onChange={e => setInputText(e.target.value)}
-            onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); sendMemo(e as unknown as React.FormEvent); } }}
-            placeholder="memo" autoComplete="off" rows={1}
-            className="y2k-input"
-            style={{
-              flex:1, padding:"7px 10px", border:"1px solid var(--border-color, #e8e8e8)",
-              borderRadius:4, fontSize:13, fontFamily:"inherit", color:"var(--text-color)",
-              outline:"none", background:"var(--bg-color)", transition:"all 0.2s ease",
-              resize:"none", overflow:"hidden", lineHeight:1.5, minHeight:32, maxHeight:120,
-            }}
-          />
-
-          <button type="submit" disabled={!inputText.trim() || sending}
-            className="y2k-send"
-            style={{
-              background: inputText.trim() ? "var(--accent)" : "var(--border-color, #e8e8e8)",
-              color:"white", border:"none", borderRadius:12, padding:"0 14px",
-              fontFamily:"inherit", fontSize:12, fontWeight:"bold", height:32,
-              cursor: inputText.trim() ? "pointer" : "not-allowed", transition:"all 0.2s",
+          {replyingMemo && (
+            <div style={{
+              display:"flex", alignItems:"center", gap:6, padding:"5px 10px",
+              background:"var(--accent-light)", borderBottom:"1px solid var(--border-color)",
+              fontSize:11, color:"var(--accent)",
             }}>
-            SEND
-          </button>
+              <ReplyIcon />
+              <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", opacity:0.8 }}>
+                {replyingMemo.content.split("\n")[0].slice(0, 50)}
+              </span>
+              <button type="button" onClick={() => setReplyingTo(null)}
+                style={{ background:"none", border:"none", cursor:"pointer", color:"var(--accent)", fontSize:14, padding:0, lineHeight:1, opacity:0.7 }}>×</button>
+            </div>
+          )}
+
+          <div style={{ display:"flex", gap:6, padding:"8px 8px 0", alignItems:"flex-end" }}>
+            <button type="button" title="이미지 첨부"
+              style={{ width:32, height:32, border:"1px solid var(--accent-light)", borderRadius:4, background:"var(--bg-color)", color:"var(--accent)", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0, cursor:"pointer", opacity:0.75 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </button>
+            <input type="file" accept="image/*" multiple style={{ display:"none" }} />
+
+            <textarea ref={textareaRef} value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Escape" && replyingTo) { setReplyingTo(null); return; }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMemo(e as unknown as React.FormEvent); }
+              }}
+              placeholder={replyingMemo ? "답글 입력..." : "memo"} autoComplete="off" rows={1}
+              className="y2k-input"
+              style={{
+                flex:1, padding:"7px 10px", border:"1px solid var(--border-color, #e8e8e8)",
+                borderRadius:4, fontSize:13, fontFamily:"inherit", color:"var(--text-color)",
+                outline:"none", background:"var(--bg-color)", transition:"all 0.2s ease",
+                resize:"none", overflow:"hidden", lineHeight:1.5, minHeight:32, maxHeight:120,
+              }}
+            />
+
+            <button type="submit" disabled={!inputText.trim() || sending}
+              className="y2k-send"
+              style={{
+                background: inputText.trim() ? "var(--accent)" : "var(--border-color, #e8e8e8)",
+                color:"white", border:"none", borderRadius:12, padding:"0 14px",
+                fontFamily:"inherit", fontSize:12, fontWeight:"bold", height:32,
+                cursor: inputText.trim() ? "pointer" : "not-allowed", transition:"all 0.2s",
+              }}>
+              SEND
+            </button>
+          </div>
         </form>
       </div>
 
-      {/* fixed refresh */}
       <button onClick={() => loadMemos()} title="새로고침"
         style={{ position:"fixed", bottom:60, left:4, background:"none", border:"none", cursor:"pointer", fontSize:10, color:"#9ca3af", opacity:0.25, padding:2, lineHeight:1, zIndex:50 }}>
         ↻

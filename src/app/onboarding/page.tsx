@@ -166,7 +166,7 @@ function Steps({ current }: { current: number }) {
 }
 
 /* ── step 1 ── */
-function Step1({ onNext }: { onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[] }) => void }) {
+function Step1({ onNext }: { onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[]; folderProp?:string; pinnedProp?:string; importantProp?:string; replyProp?:string }) => void }) {
   const [token, setToken]   = useState("");
   const [dbs, setDbs]       = useState<DB[]>([]);
   const [selected, setSelected] = useState("");
@@ -190,12 +190,17 @@ function Step1({ onNext }: { onNext: (d: { token:string; databaseId:string; titl
     const db = dbs.find(d => d.id === selected);
     if (!db) return;
     let folderOptions: string[] = [];
+    let folderProp: string | undefined, pinnedProp: string | undefined, importantProp: string | undefined, replyProp: string | undefined;
     try {
       const r = await fetch("/api/notion/schema", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ token:token.trim(), databaseId:selected }) });
       const d = await r.json();
-      folderOptions = d.folderOptions ?? [];
+      folderOptions   = d.folderOptions ?? [];
+      folderProp      = d.folderPropName ?? undefined;
+      pinnedProp      = d.pinnedPropName ?? undefined;
+      importantProp   = d.importantPropName ?? undefined;
+      replyProp       = d.replyPropName ?? undefined;
     } catch { /* ok */ }
-    onNext({ token:token.trim(), databaseId:selected, title:db.title, folderOptions });
+    onNext({ token:token.trim(), databaseId:selected, title:db.title, folderOptions, folderProp, pinnedProp, importantProp, replyProp });
   }
 
   return (
