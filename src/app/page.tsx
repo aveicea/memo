@@ -22,6 +22,7 @@ interface Config {
   alignLeft?: boolean;
   folderProp?: string; pinnedProp?: string;
   importantProp?: string; replyProp?: string; dateProp?: string;
+  mobile?: boolean;
 }
 
 function hex2hsl(hex: string): [number, number, number] {
@@ -98,9 +99,13 @@ const ReplyIcon = () => (
 );
 
 function applyMarkdownShortcuts(val: string): string {
+  // Typing checkbox/bullet markers auto-formats them — no need to type the
+  // leading "- ". Works anywhere a line starts.
   return val
     .replace(/(^|\n)\[ \] /g, "$1- [ ] ")
-    .replace(/(^|\n)\[\] /g, "$1- [ ] ");
+    .replace(/(^|\n)\[\] /g, "$1- [ ] ")
+    .replace(/(^|\n)\[x\] /g, "$1- [x] ")
+    .replace(/(^|\n)\[X\] /g, "$1- [x] ");
 }
 
 function parseLines(content: string) {
@@ -296,21 +301,22 @@ function PendingBubble() {
   );
 }
 
-function ReplyBubble({ text, first, onReply }: { text: string; first: boolean; onReply: () => void }) {
+function ReplyBubble({ text, first, onReply, mobile }: { text: string; first: boolean; onReply: () => void; mobile?: boolean }) {
   const [hover, setHover] = useState(false);
   function copy() { navigator.clipboard.writeText(text).catch(() => {}); }
   const iconBtn = { background: "none", border: "none", cursor: "pointer", padding: 2, color: "#bbb", lineHeight: 1, transition: "color 0.15s" } as const;
+  const show = hover || mobile;
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ alignSelf: "flex-start", maxWidth: "85%", marginTop: first ? 6 : 3, display: "flex", alignItems: "center", gap: 3 }}>
+      style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", alignItems: "center", gap: 3 }}>
       <div style={{
-        background: "var(--reply-bubble-color)", padding: "8px 12px",
-        borderRadius: "12px 12px 12px 2px", fontSize: 13,
+        background: "var(--reply-bubble-color)", padding: mobile ? "10px 14px" : "8px 12px",
+        borderRadius: "12px 12px 12px 2px", fontSize: mobile ? 15 : 13,
         color: "var(--reply-text-color)", lineHeight: 1.4,
         wordBreak: "break-word", whiteSpace: "pre-wrap", fontFamily: "inherit",
       }}>{text}</div>
       <div style={{ display: "flex", flexDirection: "row", alignItems: "center", flexShrink: 0,
-        opacity: hover ? 1 : 0, pointerEvents: hover ? "auto" : "none", transition: "opacity 0.15s" }}>
+        opacity: show ? 1 : 0, pointerEvents: show ? "auto" : "none", transition: "opacity 0.15s" }}>
         <button onClick={onReply} title="답글" style={iconBtn}
           onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")} onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}><ReplyIcon /></button>
         <button onClick={copy} title="복사" style={iconBtn}
@@ -322,10 +328,11 @@ function ReplyBubble({ text, first, onReply }: { text: string; first: boolean; o
   );
 }
 
-function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, onDelete, onToggle, onEdit, onReply }: {
+function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImportant, onDelete, onToggle, onEdit, onReply }: {
   memo: Memo;
   folderColor?: string;
   folderBubbleColor?: string;
+  mobile?: boolean;
   onPin: () => void; onImportant: () => void; onDelete: () => void;
   onToggle: (id: string, checked: boolean) => void;
   onEdit: (content: string) => void;
@@ -379,11 +386,11 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
   if (editing) {
     return (
       <div style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ alignSelf: "flex-end", width: "85%", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ alignSelf: "flex-end", width: mobile ? "92%" : "85%", display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ position: "relative" }}>
             <div aria-hidden style={{
               position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
-              padding: "9px 14px", fontSize: 13, fontFamily: "inherit", lineHeight: 1.4,
+              padding: "9px 14px", fontSize: mobile ? 16 : 13, fontFamily: "inherit", lineHeight: 1.4,
               color: "var(--msg-text-color)", pointerEvents: "none",
               whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden",
             }}>{renderInputPreview(editText)}</div>
@@ -425,7 +432,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
                 }
               }}
               className="y2k-input"
-              style={{ display: "block", width: "100%", padding: "9px 14px", border: "1px solid var(--accent)", borderRadius: "12px 12px 2px 12px", fontSize: 13, color: "transparent", caretColor: "var(--msg-text-color)", lineHeight: 1.4, background: "var(--msg-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 72, outline: "none", boxSizing: "border-box" }} />
+              style={{ display: "block", width: "100%", padding: "9px 14px", border: "1px solid var(--accent)", borderRadius: "12px 12px 2px 12px", fontSize: mobile ? 16 : 13, color: "transparent", caretColor: "var(--msg-text-color)", lineHeight: 1.4, background: "var(--msg-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 72, outline: "none", boxSizing: "border-box" }} />
           </div>
           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
             <button onClick={cancelEdit}
@@ -440,10 +447,10 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
 
   return (
     <div data-guestbook-entry-id={memo.id}
-      draggable
+      draggable={!mobile}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: "grab" }}>
+      style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: mobile ? "default" : "grab" }}>
 
       <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ width: "100%", display: "flex", flexDirection: "column", gap: 0 }}>
@@ -451,9 +458,9 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
         {/* ROW: left buttons + bubble — always hug the right edge */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
 
-          {/* LEFT ACTIONS: collapse to 0 when inactive, no gap */}
+          {/* LEFT ACTIONS: collapse to 0 when inactive, no gap. On mobile (no hover) keep them reachable. */}
           <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-            <div style={{ maxWidth: (hover || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || mobile || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || mobile || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
@@ -461,7 +468,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
                 onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
               ><PinIcon /></button>
             </div>
-            <div style={{ maxWidth: (hover || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || mobile || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || mobile || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
@@ -469,7 +476,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
                 onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
               >♥</button>
             </div>
-            <div style={{ maxWidth: hover ? 22 : 0, overflow: "hidden", opacity: hover ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || mobile) ? 22 : 0, overflow: "hidden", opacity: (hover || mobile) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={copyText} title="복사"
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc", transition: "color 0.15s" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
@@ -480,11 +487,12 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
 
           {/* BUBBLE */}
           <div onMouseEnter={() => scheduleActions(true)} onMouseLeave={() => scheduleActions(false)}
+            onClick={mobile ? () => setShowActions(v => !v) : undefined}
             style={{
-              maxWidth: "75%",
+              maxWidth: mobile ? "90%" : "75%",
               background: bubbleBg, border: "none",
-              padding: "9px 14px", borderRadius: "12px 12px 2px 12px",
-              fontSize: 13, color: textColor, lineHeight: 1.4,
+              padding: mobile ? "10px 15px" : "9px 14px", borderRadius: "12px 12px 2px 12px",
+              fontSize: mobile ? 15 : 13, color: textColor, lineHeight: 1.4,
               overflowWrap: "break-word", wordBreak: "normal", whiteSpace: "pre-wrap",
               boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
               transition: "background 0.2s, color 0.2s",
@@ -501,11 +509,11 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
           </div>
         </div>
 
-        {/* BELOW ACTIONS: 답글, 수정, 삭제 — right-side hover with a small delay */}
+        {/* BELOW ACTIONS: 답글, 수정, 삭제 — hover (desktop) or tap the bubble (mobile) */}
         <div onMouseEnter={() => scheduleActions(true)} onMouseLeave={() => scheduleActions(false)}
           style={{
-            alignSelf: "flex-end", display: "flex", gap: 1,
-            height: showActions ? 20 : 0, overflow: "hidden",
+            alignSelf: "flex-end", display: "flex", gap: mobile ? 4 : 1,
+            height: showActions ? (mobile ? 30 : 20) : 0, overflow: "hidden",
             transition: "height 0.15s",
           }}>
           {[
@@ -516,8 +524,8 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
               icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> },
           ].map(a => (
             <button key={a.label} onClick={a.onClick} title={a.label}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 6px", lineHeight: 1,
-                color: "#bbb", fontSize: 10, fontFamily: "inherit",
+              style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 10px" : "2px 6px", lineHeight: 1,
+                color: "#bbb", fontSize: mobile ? 12 : 10, fontFamily: "inherit",
                 display: "flex", alignItems: "center", gap: 3,
                 transition: "color 0.15s" }}
               onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
@@ -529,7 +537,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
 
       {/* reply bubbles */}
       {memo.replies.map((r, i) => (
-        <ReplyBubble key={i} text={r} first={i === 0} onReply={onReply} />
+        <ReplyBubble key={i} text={r} first={i === 0} onReply={onReply} mobile={mobile} />
       ))}
     </div>
   );
@@ -596,6 +604,31 @@ export default function WidgetPage() {
   const accent     = cfg?.accent ?? "#E8A8C0";
   const fontFamily = cfg?.fontFamily ?? "'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif";
   const cssVars    = cfg ? buildCssVars(cfg) : buildCssVars({ accent } as Config);
+  const mobile     = !!cfg?.mobile;
+
+  // Mobile formatting toolbar actions — wrap the current selection (bold/italic/
+  // strikethrough) or insert a list marker at the line start. Mirrors the desktop
+  // keyboard shortcuts so touch users get the same Notion-style formatting.
+  function wrapSelection(left: string, right: string) {
+    const ta = textareaRef.current; if (!ta) return;
+    const s = ta.selectionStart ?? 0, e = ta.selectionEnd ?? 0, v = ta.value;
+    if (s === e) { cursorPosRef.current = s + left.length; setInputText(v.slice(0, s) + left + right + v.slice(s)); }
+    else { cursorPosRef.current = e + left.length + right.length; setInputText(v.slice(0, s) + left + v.slice(s, e) + right + v.slice(e)); }
+  }
+  function insertLineMarker(marker: string) {
+    const ta = textareaRef.current; if (!ta) return;
+    const s = ta.selectionStart ?? 0, v = ta.value;
+    const lineStart = v.lastIndexOf("\n", s - 1) + 1;
+    // Toggle off if the same marker already leads the line.
+    const existing = v.slice(lineStart).match(/^(- \[[ x]\] |- |\d+\. )/);
+    if (existing && existing[1] === marker) {
+      cursorPosRef.current = Math.max(s - marker.length, lineStart);
+      setInputText(v.slice(0, lineStart) + v.slice(lineStart + marker.length));
+    } else {
+      cursorPosRef.current = s + marker.length;
+      setInputText(v.slice(0, lineStart) + marker + v.slice(lineStart));
+    }
+  }
 
   const loadMemos = useCallback(async (cursor?: string) => {
     if (!cfg) return;
@@ -998,6 +1031,7 @@ export default function WidgetPage() {
       <MemoBubble key={memo.id} memo={memo}
         folderColor={folderColor(memo.folder)}
         folderBubbleColor={folderBubbleColor(memo.folder)}
+        mobile={mobile}
         onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
         onImportant={() => updateMemo(memo.id, { important: !memo.important })}
         onDelete={() => deleteMemo(memo.id)}
@@ -1011,12 +1045,13 @@ export default function WidgetPage() {
   return (
     <div style={{
       width:"100%", height:"100dvh", boxSizing:"border-box", overflow:"hidden",
-      padding:16, display:"flex", alignItems:"center", justifyContent:"center",
+      padding: mobile ? 0 : 16, display:"flex", alignItems:"center", justifyContent:"center",
       fontFamily: fontFamily, background:"#ffffff",
     }}>
       <style>{cssVars}</style>
+      {mobile && <style>{`.mobile-memo:hover{transform:none!important;box-shadow:none!important;}`}</style>}
 
-      <div className="y2k-widget" style={{
+      <div className={mobile ? "y2k-widget mobile-memo" : "y2k-widget"} style={{
         width:"100%", maxWidth:"100%", height: minimized ? "auto" : "100%",
         alignSelf: minimized ? "flex-start" : "stretch",
         background:"var(--bg-color)", borderRadius:0, border:"none", outline:"none",
@@ -1026,7 +1061,7 @@ export default function WidgetPage() {
 
         {/* Header */}
         <div style={{
-          height:35, background:"var(--accent-light)",
+          height: mobile?46:35, background:"var(--accent-light)",
           borderBottom:"1px solid var(--accent)",
           display:"flex", alignItems:"center", justifyContent:"space-between",
           padding:"0 8px 0 10px", fontSize:13, color:"var(--accent)", flexShrink:0,
@@ -1034,13 +1069,13 @@ export default function WidgetPage() {
           <div style={{ display:"flex", gap:4, alignItems:"center", flex:1, minWidth:0, overflow:"hidden" }}>
             <div style={{ display:"flex", alignItems:"center", gap:0, fontSize:12, fontWeight:600, fontFamily:"inherit", minWidth:0, flex:1 }}>
               <button className="y2k-folder-btn" onClick={() => setShowSidebar(v => !v)} title="폴더 숨기기"
-                style={{ background:"none", border:"none", cursor:"pointer", padding:"0 5px 0 2px", lineHeight:"35px", height:35, display:"flex", alignItems:"center", color:"var(--accent)", opacity:0.7, transition:"opacity 0.15s", flexShrink:0 }}>
+                style={{ background:"none", border:"none", cursor:"pointer", padding:"0 5px 0 2px", lineHeight: mobile?"46px":"35px", height: mobile?46:35, display:"flex", alignItems:"center", color:"var(--accent)", opacity:0.7, transition:"opacity 0.15s", flexShrink:0 }}>
                 <FolderIcon size={14} fill="currentColor" stroke="currentColor" />
               </button>
 
               <div className="y2k-folder-tabs" style={{ display:"flex", alignItems:"center", flex:1, minWidth:0, overflowX:"auto" }}>
                 <button className="y2k-folder-btn" onClick={() => setFolder("ALL")}
-                  style={{ background:"none", border:"none", cursor:"pointer", padding:"0 9px", fontSize:12, fontWeight: activeFolder==="ALL" ? 700 : 500, fontFamily:"inherit", color:"var(--text-color)", opacity: activeFolder==="ALL" ? 1 : 0.55, lineHeight:"35px", height:35, borderRadius:0, transition:"all 0.15s", flexShrink:0, whiteSpace:"nowrap" }}>
+                  style={{ background:"none", border:"none", cursor:"pointer", padding: mobile?"0 12px":"0 9px", fontSize: mobile?14:12, fontWeight: activeFolder==="ALL" ? 700 : 500, fontFamily:"inherit", color:"var(--text-color)", opacity: activeFolder==="ALL" ? 1 : 0.55, lineHeight: mobile?"46px":"35px", height: mobile?46:35, borderRadius:0, transition:"all 0.15s", flexShrink:0, whiteSpace:"nowrap" }}>
                   ALL
                 </button>
                 {folderList.map(f => (
@@ -1050,7 +1085,7 @@ export default function WidgetPage() {
                       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolder(f); }}
                       onDragLeave={() => setDragOverFolder(null)}
                       onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData("text/plain"); if (id) updateMemo(id, { folder: f }); setDragOverFolder(null); }}
-                      style={{ background: dragOverFolder===f ? "var(--accent-light)" : "none", border:"none", cursor:"pointer", padding:"0 9px", fontSize:12, fontWeight: activeFolder===f ? 700 : 500, fontFamily:"inherit", color:"var(--text-color)", opacity: activeFolder===f ? 1 : 0.55, lineHeight:"35px", height:35, borderRadius:4, transition:"all 0.15s", whiteSpace:"nowrap", outline: dragOverFolder===f ? "2px dashed var(--accent)" : "none" }}>
+                      style={{ background: dragOverFolder===f ? "var(--accent-light)" : "none", border:"none", cursor:"pointer", padding: mobile?"0 12px":"0 9px", fontSize: mobile?14:12, fontWeight: activeFolder===f ? 700 : 500, fontFamily:"inherit", color:"var(--text-color)", opacity: activeFolder===f ? 1 : 0.55, lineHeight: mobile?"46px":"35px", height: mobile?46:35, borderRadius:4, transition:"all 0.15s", whiteSpace:"nowrap", outline: dragOverFolder===f ? "2px dashed var(--accent)" : "none" }}>
                       {f}
                     </button>
                   </div>
@@ -1059,9 +1094,9 @@ export default function WidgetPage() {
                   <div key={label} style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
                     <span style={{ color:"var(--accent)", opacity:0.3, fontSize:9 }}>|</span>
                     <button className="y2k-folder-btn" onClick={() => setFolder(label)}
-                      style={{ background:"none", border:"none", cursor:"pointer", padding:"0 7px", lineHeight:"35px", height:35, display:"flex", alignItems:"center", gap:3, opacity: activeFolder===label ? 1 : 0.5, transition:"opacity 0.15s", color:"var(--text-color)" }}>
-                      <FolderIcon size={13} fill="currentColor" stroke="currentColor" />
-                      <span style={{ fontSize:10, fontFamily:"inherit", fontWeight:500 }}>{label}</span>
+                      style={{ background:"none", border:"none", cursor:"pointer", padding:"0 7px", lineHeight: mobile?"46px":"35px", height: mobile?46:35, display:"flex", alignItems:"center", gap:3, opacity: activeFolder===label ? 1 : 0.5, transition:"opacity 0.15s", color:"var(--text-color)" }}>
+                      <FolderIcon size={mobile?15:13} fill="currentColor" stroke="currentColor" />
+                      <span style={{ fontSize: mobile?12:10, fontFamily:"inherit", fontWeight:500 }}>{label}</span>
                     </button>
                   </div>
                 ))}
@@ -1071,7 +1106,7 @@ export default function WidgetPage() {
 
           <div style={{ display:"flex", gap:4, alignItems:"center" }}>
             <div className="y2k-win-btn" onClick={() => loadMemos()} title="새로고침"
-              style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>
+              style={{ width: mobile?20:12, height: mobile?20:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize: mobile?12:9, cursor:"pointer", lineHeight:1 }}>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
                 <path d="M3 3v5h5"/>
@@ -1080,9 +1115,9 @@ export default function WidgetPage() {
               </svg>
             </div>
             <div className="y2k-win-btn" onClick={() => setMinimized(v => !v)} title={minimized ? "펼치기" : "최소화"}
-              style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>{minimized ? "□" : "_"}</div>
+              style={{ width: mobile?20:12, height: mobile?20:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize: mobile?12:9, cursor:"pointer", lineHeight:1 }}>{minimized ? "□" : "_"}</div>
             <div className="y2k-win-btn"
-              style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, lineHeight:1 }}>x</div>
+              style={{ width: mobile?20:12, height: mobile?20:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize: mobile?12:9, lineHeight:1 }}>x</div>
           </div>
         </div>
 
@@ -1091,12 +1126,12 @@ export default function WidgetPage() {
           {/* Sidebar */}
           <div style={{ flexShrink:0, display:"flex", flexDirection:"row", alignItems:"stretch", overflow:"hidden" }}>
             <div style={{
-              width: showSidebar ? 110 : 0,
+              width: showSidebar ? (mobile?128:110) : 0,
               opacity: showSidebar ? 1 : 0,
-              transform: showSidebar ? "translateX(0)" : "translateX(-110px)",
+              transform: showSidebar ? "translateX(0)" : (mobile?"translateX(-128px)":"translateX(-110px)"),
               transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
-              display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 2px",
-              padding: showSidebar ? "18px 6px 8px 17px" : 0,
+              display:"grid", gridTemplateColumns:"1fr 1fr", gap: mobile?"10px 4px":"6px 2px",
+              padding: showSidebar ? (mobile?"20px 6px 8px 16px":"18px 6px 8px 17px") : 0,
               overflow:"hidden", alignContent:"start",
             }}>
               {sidebarItems.map((item, i) => {
@@ -1128,13 +1163,13 @@ export default function WidgetPage() {
                       ...(isSpecial ? { justifySelf:"end" } : {}),
                     }}>
                     <div style={{ pointerEvents:"none", opacity: isActive ? 1 : 0.7 }}>
-                      <FolderIcon size={25} fill={color} stroke={color} />
+                      <FolderIcon size={mobile?30:25} fill={color} stroke={color} />
                     </div>
                     <span style={{
-                      pointerEvents:"none", fontSize: isSpecial ? 9 : 10,
+                      pointerEvents:"none", fontSize: isSpecial ? (mobile?11:9) : (mobile?12:10),
                       fontWeight:500, color:"var(--text-color)", opacity: isActive ? 1 : 0.55,
                       fontFamily:"inherit", textAlign:"center", lineHeight:1.1,
-                      maxWidth:48, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                      maxWidth: mobile?54:48, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
                     }}>{label}</span>
                   </div>
                 );
@@ -1203,7 +1238,7 @@ export default function WidgetPage() {
 
         {/* Input form */}
         <form onSubmit={sendMemo} style={{
-          paddingBottom:8,
+          paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 8px) + 8px)" : 8,
           borderTop:"1px dotted var(--border-dot)",
           display: minimized ? "none" : "flex", flexDirection:"column", background:"var(--bg-color)", flexShrink:0,
         }}>
@@ -1236,9 +1271,30 @@ export default function WidgetPage() {
             </div>
           )}
 
+          {/* Mobile formatting toolbar — no keyboard shortcuts on touch, so expose
+              bold/italic/strike + list markers as buttons. They wrap the selection
+              or insert a marker at the line start. */}
+          {mobile && (
+            <div style={{ display:"flex", gap:6, padding:"6px 8px 0", flexWrap:"wrap" }}>
+              {[
+                { key:"b", label:"B",  style:{ fontWeight:800 } as React.CSSProperties, onClick:() => wrapSelection("**","**") },
+                { key:"i", label:"i",  style:{ fontStyle:"italic", fontFamily:"serif" } as React.CSSProperties, onClick:() => wrapSelection("_","_") },
+                { key:"s", label:"S",  style:{ textDecoration:"line-through" } as React.CSSProperties, onClick:() => wrapSelection("~~","~~") },
+                { key:"c", label:"☑",  style:{} as React.CSSProperties, onClick:() => insertLineMarker("- [ ] ") },
+                { key:"u", label:"•",  style:{} as React.CSSProperties, onClick:() => insertLineMarker("- ") },
+                { key:"n", label:"1.", style:{} as React.CSSProperties, onClick:() => insertLineMarker("1. ") },
+              ].map(b => (
+                <button key={b.key} type="button" onMouseDown={e => e.preventDefault()} onClick={b.onClick}
+                  style={{ minWidth:34, height:30, border:"1px solid var(--accent-light)", borderRadius:6, background:"var(--bg-color)", color:"var(--text-color)", fontSize:14, fontFamily:"inherit", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", padding:"0 8px", ...b.style }}>
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div style={{ display:"flex", gap:6, padding:"8px 8px 0", alignItems:"flex-end" }}>
             <label title="이미지 첨부"
-              style={{ width:32, height:32, border:"1px solid var(--accent-light)", borderRadius:4, background:"var(--bg-color)", color:"var(--accent)", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0, cursor:"pointer", opacity:0.75 }}>
+              style={{ width: mobile?40:32, height: mobile?40:32, border:"1px solid var(--accent-light)", borderRadius:4, background:"var(--bg-color)", color:"var(--accent)", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0, cursor:"pointer", opacity:0.75 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                 <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -1260,7 +1316,7 @@ export default function WidgetPage() {
               {/* Rendered markdown preview (sits on top, pointer-events none) */}
               <div aria-hidden style={{
                 position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
-                padding: "7px 10px", fontSize: 13, fontFamily: "inherit", lineHeight: 1.5,
+                padding: mobile ? "9px 12px" : "7px 10px", fontSize: mobile ? 16 : 13, fontFamily: "inherit", lineHeight: 1.5,
                 color: "var(--text-color)", pointerEvents: "none",
                 whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "hidden",
               }}>
@@ -1276,12 +1332,12 @@ export default function WidgetPage() {
                 placeholder="" autoComplete="off" rows={1}
                 className="y2k-input"
                 style={{
-                  display: "block", width: "100%", padding: "7px 10px",
+                  display: "block", width: "100%", padding: mobile ? "9px 12px" : "7px 10px",
                   border: "1px solid var(--border-color, #e8e8e8)",
-                  borderRadius: 4, fontSize: 13, fontFamily: "inherit",
+                  borderRadius: 4, fontSize: mobile ? 16 : 13, fontFamily: "inherit",
                   color: "transparent", caretColor: "var(--text-color)",
                   outline: "none", background: "var(--bg-color)", transition: "border 0.2s ease",
-                  resize: "none", overflow: "hidden", lineHeight: 1.5, minHeight: 32, maxHeight: 120,
+                  resize: "none", overflow: "hidden", lineHeight: 1.5, minHeight: mobile ? 40 : 32, maxHeight: 120,
                   boxSizing: "border-box",
                 }}
               />
@@ -1291,8 +1347,8 @@ export default function WidgetPage() {
               className="y2k-send"
               style={{
                 background: (inputText.trim() || pendingImages.length > 0) ? "var(--accent)" : "var(--border-color, #e8e8e8)",
-                color:"white", border:"none", borderRadius:12, padding:"0 14px",
-                fontFamily:"inherit", fontSize:12, fontWeight:"bold", height:32,
+                color:"white", border:"none", borderRadius:12, padding: mobile?"0 18px":"0 14px",
+                fontFamily:"inherit", fontSize: mobile?13:12, fontWeight:"bold", height: mobile?40:32,
                 cursor: (inputText.trim() || pendingImages.length > 0) ? "pointer" : "not-allowed", transition:"all 0.2s",
               }}>
               SEND
