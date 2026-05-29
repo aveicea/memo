@@ -84,8 +84,10 @@ const PinIcon = () => (
 
 const ReplyIcon = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 17 4 12 9 7"/>
-    <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
+    <g transform="scale(-1 1) translate(-24 0)">
+      <polyline points="9 17 4 12 9 7"/>
+      <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
+    </g>
   </svg>
 );
 
