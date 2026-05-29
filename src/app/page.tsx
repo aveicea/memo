@@ -305,7 +305,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
       style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: "default" }}>
 
       <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        style={{ alignSelf: "flex-end", display: "flex", flexDirection: "column", gap: 0 }}>
+        style={{ width: "100%", display: "flex", flexDirection: "column", gap: 0 }}>
 
         {/* ROW: left buttons + bubble — always hug the right edge */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
@@ -344,7 +344,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
               background: bubbleBg, border: "none",
               padding: "9px 14px", borderRadius: "12px 12px 2px 12px",
               fontSize: 13, color: textColor, lineHeight: 1.4,
-              wordBreak: "break-word", whiteSpace: "pre-wrap",
+              overflowWrap: "break-word", wordBreak: "normal", whiteSpace: "pre-wrap",
               boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
               transition: "background 0.2s, color 0.2s",
             }}>
