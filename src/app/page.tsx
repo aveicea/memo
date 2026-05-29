@@ -120,10 +120,13 @@ function parseLines(content: string) {
 
 function renderInputPreview(text: string): React.ReactNode {
   return text.split("\n").map((line, i) => {
+    const indentCount = line.match(/^( *)/)?.[1]?.length ?? 0;
+    const indent = Math.floor(indentCount / 2);
+    const pad = indent * 14;
     const trimmed = line.trimStart();
     const todo = trimmed.match(/^- \[(x| )\] ?(.*)/);
     if (todo) return (
-      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em" }}>
+      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
         <span style={{ flexShrink: 0, marginTop: 2, opacity: todo[1]==="x" ? 0.35 : 0.6 }}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
@@ -134,7 +137,7 @@ function renderInputPreview(text: string): React.ReactNode {
       </div>
     );
     if (trimmed.startsWith("- ")) return (
-      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em" }}>
+      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
         <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, marginTop: 2 }}>•</span>
         <span>{trimmed.slice(2)}</span>
       </div>
@@ -613,6 +616,24 @@ export default function WidgetPage() {
     if (e.nativeEvent.isComposing) return;
     if (e.key === "Escape" && replyingTo) { setReplyingTo(null); return; }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMemo(e as unknown as React.FormEvent); return; }
+    if (e.key === "Enter" && e.shiftKey) {
+      // Continue the current list item on Shift+Enter (Notion-style): a new
+      // line inside a checkbox/bullet should keep the same marker + indent.
+      const ta = e.currentTarget;
+      const start = ta.selectionStart ?? 0;
+      const val = ta.value;
+      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+      const curLine = val.slice(lineStart, start);
+      const m = curLine.match(/^(\s*)(- \[[ x]\] |- )/);
+      if (m) {
+        const marker = m[2].startsWith("- [") ? "- [ ] " : "- ";
+        const insert = "\n" + m[1] + marker;
+        e.preventDefault();
+        cursorPosRef.current = start + insert.length;
+        setInputText(val.slice(0, start) + insert + val.slice(start));
+      }
+      return;
+    }
     if (e.key === "Tab") {
       e.preventDefault();
       const ta = e.currentTarget;
