@@ -126,19 +126,26 @@ function renderInputPreview(text: string): React.ReactNode {
     const trimmed = line.trimStart();
     const todo = trimmed.match(/^- \[(x| )\] ?(.*)/);
     if (todo) return (
-      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
-        <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: todo[1]==="x" ? 0.35 : 0.6 }}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
-            {todo[1]==="x" && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
-          </svg>
+      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
+        {/* invisible raw prefix reserves the exact same width as the textarea text */}
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <span style={{ opacity: 0, whiteSpace: "pre" }}>{todo[1]==="x" ? "- [x] " : "- [ ] "}</span>
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: todo[1]==="x" ? 0.35 : 0.6 }}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+              {todo[1]==="x" && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
+            </svg>
+          </span>
         </span>
         <span style={{ textDecoration: todo[1]==="x" ? "line-through" : "none", opacity: todo[1]==="x" ? 0.4 : 1 }}>{todo[2]}</span>
       </div>
     );
     if (trimmed.startsWith("- ")) return (
-      <div key={i} style={{ display: "flex", gap: 5, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
-        <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, height: "1.4em", display: "flex", alignItems: "center" }}>•</span>
+      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em", paddingLeft: pad }}>
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <span style={{ opacity: 0, whiteSpace: "pre" }}>{"- "}</span>
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.5, fontSize: 11 }}>•</span>
+        </span>
         <span>{trimmed.slice(2)}</span>
       </div>
     );
