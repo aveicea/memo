@@ -64,6 +64,22 @@ function parseDate(ts: string): string {
   return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Notion requires writing the page title under whatever name the database's
+// title property actually uses — it is NOT always "Name". Look it up so page
+// creation doesn't fail silently for databases with a renamed title column.
+export async function resolveTitleProp(token: string, databaseId: string): Promise<string> {
+  try {
+    const res = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, { headers: hdrs(token) });
+    const data = await res.json();
+    if (!res.ok) return "Name";
+    const props = data.properties as Record<string, { type: string }>;
+    const titleEntry = Object.entries(props).find(([, v]) => v.type === "title");
+    return titleEntry?.[0] ?? "Name";
+  } catch {
+    return "Name";
+  }
+}
+
 export function lineToBlock(line: string) {
   const trimmed = line.trimStart();
   const todoMatch = trimmed.match(/^- \[(x| )\] (.+)/);
@@ -151,8 +167,9 @@ export async function POST(req: NextRequest) {
     }
 
     const firstLine = (content as string).split("\n")[0].replace(/^\s*- \[.\] /, "").replace(/^\s*- /, "").slice(0, 100);
+    const titleProp = await resolveTitleProp(token, databaseId);
     const properties: Record<string, unknown> = {
-      Name: { title: [{ text: { content: firstLine || "memo" } }] },
+      [titleProp]: { title: [{ text: { content: firstLine || "memo" } }] },
     };
     if (folderProp && folder) properties[folderProp] = { select: { name: folder } };
     if (pinnedProp)    properties[pinnedProp]    = { checkbox: false };

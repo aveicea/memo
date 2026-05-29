@@ -50,9 +50,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         });
       }
       const title = (content as string).split("\n")[0].replace(/^- \[.\] /, "").replace(/^- /, "").slice(0, 100);
+      // Resolve the page's actual title property name (not always "Name").
+      let titleProp = "Name";
+      try {
+        const pRes = await fetch(`https://api.notion.com/v1/pages/${id}`, { headers: hdrs(token) });
+        const pData = await pRes.json();
+        if (pRes.ok) {
+          const props = pData.properties as Record<string, { type: string }>;
+          const titleEntry = Object.entries(props).find(([, v]) => v.type === "title");
+          if (titleEntry) titleProp = titleEntry[0];
+        }
+      } catch { /* fall back to "Name" */ }
       await fetch(`https://api.notion.com/v1/pages/${id}`, {
         method: "PATCH", headers: hdrs(token),
-        body: JSON.stringify({ properties: { Name: { title: [{ type: "text", text: { content: title || "memo" } }] } } }),
+        body: JSON.stringify({ properties: { [titleProp]: { title: [{ type: "text", text: { content: title || "memo" } }] } } }),
       });
     }
 

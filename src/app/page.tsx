@@ -520,7 +520,7 @@ export default function WidgetPage() {
     const pad = (n: number) => String(n).padStart(2,"0");
     const createdAt = `${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
     const targetFolder =
-      activeFolder === "ALL" || activeFolder === "고정" || activeFolder === "중요"
+      activeFolder === "ALL" || activeFolder === "전체" || activeFolder === "고정" || activeFolder === "중요"
         ? (cfg.folderOptions[0] ?? "")
         : activeFolder;
 
@@ -550,10 +550,18 @@ export default function WidgetPage() {
         setMemos(prev => prev.map(m => m.id === tempId
           ? { ...tempMemo, id: d.id, pending: false } : m));
       } else {
+        // Save failed — drop the optimistic bubble, restore the draft, and
+        // surface the real Notion error instead of failing silently.
         setMemos(prev => prev.filter(m => m.id !== tempId));
+        setInputText(text);
+        setPendingImages(images);
+        alert("저장 실패: " + (d.error ?? "알 수 없는 오류"));
       }
     } catch {
       setMemos(prev => prev.filter(m => m.id !== tempId));
+      setInputText(text);
+      setPendingImages(images);
+      alert("저장 실패: 네트워크 오류");
     } finally { setSending(false); }
   }
 
@@ -640,7 +648,7 @@ export default function WidgetPage() {
 
   const effectiveFolder = (m: Memo) => m.folder || defaultFolder;
 
-  const filteredMemos = activeFolder === "ALL"  ? memos
+  const filteredMemos = activeFolder === "ALL" || activeFolder === "전체" ? memos
     : activeFolder === "고정" ? memos.filter(m => m.pinned)
     : activeFolder === "중요" ? memos.filter(m => m.important)
     : memos.filter(m => effectiveFolder(m) === activeFolder);
@@ -665,7 +673,7 @@ export default function WidgetPage() {
   // Group memos by folder for ALL tab (plain computation — must not be a hook
   // here since it runs after the early `!cfgLoaded` return above)
   const folderGroups = (() => {
-    if (activeFolder !== "ALL" || folderList.length === 0) return null;
+    if (activeFolder !== "전체" || folderList.length === 0) return null;
     const groups = new Map<string, Memo[]>();
     for (const f of folderList) groups.set(f, []);
     for (const m of memos) {
@@ -741,7 +749,7 @@ export default function WidgetPage() {
                     </button>
                   </div>
                 ))}
-                {["고정","중요"].map(label => (
+                {["고정","중요","전체"].map(label => (
                   <div key={label} style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
                     <span style={{ color:"var(--accent)", opacity:0.3, fontSize:9 }}>|</span>
                     <button className="y2k-folder-btn" onClick={() => setFolder(label)}
@@ -842,8 +850,8 @@ export default function WidgetPage() {
               </div>
             )}
 
-            {/* ALL tab: grouped by folder with collapsible sections */}
-            {activeFolder === "ALL" && folderGroups
+            {/* 전체 tab: grouped by folder with collapsible sections */}
+            {activeFolder === "전체" && folderGroups
               ? Array.from(folderGroups.entries()).map(([folder, fMemos]) => {
                   const isExpanded = expandedFolders.size === 0 ? folder === defaultFolder : expandedFolders.has(folder);
                   const fColor = folderColor(folder) ?? "var(--accent)";
