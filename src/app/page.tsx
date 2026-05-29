@@ -41,7 +41,9 @@ function hex2hsl(hex: string): [number, number, number] {
 function folderToBubbleColor(hex: string): string {
   if (!hex || !hex.startsWith("#") || hex.length < 7) return "var(--msg-bubble-color)";
   const [h, s] = hex2hsl(hex);
-  return `hsl(${h}, ${Math.min(s * 0.25, 20)}%, 95%)`;
+  // Clear pastel tint of the folder color so folders are actually
+  // distinguishable — not a near-white wash where only the border shows.
+  return `hsl(${h}, ${Math.max(Math.min(s, 70), 35)}%, 90%)`;
 }
 
 function buildCssVars(cfg: Config): string {
