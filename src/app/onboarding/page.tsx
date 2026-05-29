@@ -568,10 +568,6 @@ export default function OnboardingPage() {
           {step===3 && <Step3 config={config} onBack={() => setStep(2)} />}
         </div>
       </div>
-      <footer style={{ textAlign:"center", padding:"0 20px 40px", color:"#D4A5C9", fontSize:12, lineHeight:1.8 }}>
-        <div style={{ marginBottom:4, fontWeight:600, color:"#999" }}>bubble memo</div>
-        <div>made with <span style={{ color:"#E8A8C0" }}>♥</span></div>
-      </footer>
     </div>
   );
 }
