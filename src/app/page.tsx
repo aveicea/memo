@@ -262,20 +262,11 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
       <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ alignSelf: "flex-end", display: "flex", flexDirection: "column", gap: 0 }}>
 
-        {/* ROW: left buttons + bubble */}
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        {/* ROW: left buttons + bubble — always hug the right edge */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
 
-          {/* LEFT ACTIONS: copy first, then pin/heart — collapse to 0 width when hidden so no gap */}
+          {/* LEFT ACTIONS: pin/heart then copy (rightmost) — collapse to 0 width when hidden so no gap */}
           <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-            {/* COPY — hover only, leftmost */}
-            <div style={{ maxWidth: hover ? 22 : 0, overflow: "hidden", opacity: hover ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
-              <button onClick={copyText} title="복사"
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc", transition: "color 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
-              ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-            </div>
-
             {/* PIN — hover (gray) or when active */}
             <div style={{ maxWidth: (hover || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
@@ -294,6 +285,15 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
                 onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
                 onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
               >♥</button>
+            </div>
+
+            {/* COPY — hover only, rightmost (next to bubble) */}
+            <div style={{ maxWidth: hover ? 22 : 0, overflow: "hidden", opacity: hover ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={copyText} title="복사"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc", transition: "color 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
+              ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
             </div>
           </div>
 
