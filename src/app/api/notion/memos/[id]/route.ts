@@ -6,22 +6,45 @@ const hdrs = (token: string) => ({
   "Notion-Version": "2022-06-28",
 });
 
+type RTItem = { type: "text"; text: { content: string }; annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; code?: boolean } };
+
+function parseRichText(text: string): RTItem[] {
+  const items: RTItem[] = [];
+  const regex = /\*\*([\s\S]+?)\*\*|_([\s\S]+?)_|~~([\s\S]+?)~~|`([\s\S]+?)`/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) items.push({ type: "text", text: { content: text.slice(last, m.index) } });
+    if      (m[1] !== undefined) items.push({ type: "text", text: { content: m[1] }, annotations: { bold: true } });
+    else if (m[2] !== undefined) items.push({ type: "text", text: { content: m[2] }, annotations: { italic: true } });
+    else if (m[3] !== undefined) items.push({ type: "text", text: { content: m[3] }, annotations: { strikethrough: true } });
+    else if (m[4] !== undefined) items.push({ type: "text", text: { content: m[4] }, annotations: { code: true } });
+    last = regex.lastIndex;
+  }
+  if (last < text.length) items.push({ type: "text", text: { content: text.slice(last) } });
+  return items.length > 0 ? items : [{ type: "text", text: { content: text } }];
+}
+
 function lineToBlock(line: string) {
   const trimmed = line.trimStart();
-  const todoMatch = trimmed.match(/^- \[(x| )\] (.+)/);
+  const todoMatch = trimmed.match(/^- \[(x| )\] (.*)/);
   if (todoMatch) return {
     object: "block", type: "to_do",
-    to_do: { rich_text: [{ type: "text", text: { content: todoMatch[2] } }], checked: todoMatch[1] === "x" },
+    to_do: { rich_text: parseRichText(todoMatch[2]), checked: todoMatch[1] === "x" },
   };
-  const bulletMatch = trimmed.match(/^- (.+)/);
-  const hasIndent = line.length > line.trimStart().length;
-  if (bulletMatch && !hasIndent) return {
+  const numberedMatch = trimmed.match(/^\d+\. (.*)/);
+  if (numberedMatch) return {
+    object: "block", type: "numbered_list_item",
+    numbered_list_item: { rich_text: parseRichText(numberedMatch[1]) },
+  };
+  const bulletMatch = trimmed.match(/^- (.*)/);
+  if (bulletMatch) return {
     object: "block", type: "bulleted_list_item",
-    bulleted_list_item: { rich_text: [{ type: "text", text: { content: bulletMatch[1] } }] },
+    bulleted_list_item: { rich_text: parseRichText(bulletMatch[1]) },
   };
   return {
     object: "block", type: "paragraph",
-    paragraph: { rich_text: [{ type: "text", text: { content: line } }] },
+    paragraph: { rich_text: parseRichText(trimmed || line) },
   };
 }
 

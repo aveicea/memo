@@ -7,7 +7,7 @@ const hdrs = (token: string) => ({
   "Notion-Version": N_VER,
 });
 
-interface RT { plain_text: string }
+interface RT { plain_text: string; annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; code?: boolean } }
 interface RichTextBlock { rich_text: RT[] }
 interface NotionBlock {
   id: string; type: string;
@@ -22,16 +22,47 @@ interface NotionBlock {
 
 const RT_TYPES = ["paragraph","bulleted_list_item","numbered_list_item","heading_1","heading_2","heading_3","quote","code","callout","toggle"] as const;
 
-function getBlockText(b: NotionBlock): string {
+function rtToMarkdown(rt: RT[]): string {
+  return rt.map(r => {
+    let t = r.plain_text;
+    if (r.annotations?.code)          t = `\`${t}\``;
+    if (r.annotations?.bold)          t = `**${t}**`;
+    if (r.annotations?.italic)        t = `_${t}_`;
+    if (r.annotations?.strikethrough) t = `~~${t}~~`;
+    return t;
+  }).join("");
+}
+
+type RTItem = { type: "text"; text: { content: string }; annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; code?: boolean } };
+
+function parseRichText(text: string): RTItem[] {
+  const items: RTItem[] = [];
+  const regex = /\*\*([\s\S]+?)\*\*|_([\s\S]+?)_|~~([\s\S]+?)~~|`([\s\S]+?)`/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) items.push({ type: "text", text: { content: text.slice(last, m.index) } });
+    if      (m[1] !== undefined) items.push({ type: "text", text: { content: m[1] }, annotations: { bold: true } });
+    else if (m[2] !== undefined) items.push({ type: "text", text: { content: m[2] }, annotations: { italic: true } });
+    else if (m[3] !== undefined) items.push({ type: "text", text: { content: m[3] }, annotations: { strikethrough: true } });
+    else if (m[4] !== undefined) items.push({ type: "text", text: { content: m[4] }, annotations: { code: true } });
+    last = regex.lastIndex;
+  }
+  if (last < text.length) items.push({ type: "text", text: { content: text.slice(last) } });
+  return items.length > 0 ? items : [{ type: "text", text: { content: text } }];
+}
+
+function getBlockText(b: NotionBlock, numberedIdx = 0): string {
   if (b.type === "to_do") {
-    const text = b.to_do!.rich_text.map(r => r.plain_text).join("");
+    const text = rtToMarkdown(b.to_do!.rich_text);
     return `- [${b.to_do!.checked ? "x" : " "}] ${text}`;
   }
   for (const t of RT_TYPES) {
     if (b.type === t) {
       const rt = (b[t] as RichTextBlock | undefined)?.rich_text ?? [];
-      const text = rt.map(r => r.plain_text).join("");
-      if (b.type === "bulleted_list_item" || b.type === "numbered_list_item") return `- ${text}`;
+      const text = rtToMarkdown(rt);
+      if (b.type === "bulleted_list_item") return `- ${text}`;
+      if (b.type === "numbered_list_item") return `${numberedIdx}. ${text}`;
       return text;
     }
   }
@@ -39,14 +70,22 @@ function getBlockText(b: NotionBlock): string {
 }
 
 function parseBlocksToContent(blocks: NotionBlock[]): string {
-  return blocks.filter(b => b.type !== "image").map(getBlockText).filter(Boolean).join("\n");
+  const parts: string[] = [];
+  let numberedIdx = 0;
+  for (const b of blocks) {
+    if (b.type === "image") continue;
+    if (b.type !== "numbered_list_item") numberedIdx = 0; else numberedIdx++;
+    const text = getBlockText(b, numberedIdx);
+    if (text) parts.push(text);
+  }
+  return parts.join("\n");
 }
 
 function parseBlocksToTodos(blocks: NotionBlock[]): { id: string; checked: boolean; text: string }[] {
   return blocks.filter(b => b.type === "to_do").map(b => ({
     id: b.id,
     checked: b.to_do!.checked,
-    text: b.to_do!.rich_text.map(r => r.plain_text).join(""),
+    text: rtToMarkdown(b.to_do!.rich_text),
   }));
 }
 
@@ -82,20 +121,24 @@ export async function resolveTitleProp(token: string, databaseId: string): Promi
 
 export function lineToBlock(line: string) {
   const trimmed = line.trimStart();
-  const todoMatch = trimmed.match(/^- \[(x| )\] (.+)/);
+  const todoMatch = trimmed.match(/^- \[(x| )\] (.*)/);
   if (todoMatch) return {
     object: "block", type: "to_do",
-    to_do: { rich_text: [{ type: "text", text: { content: todoMatch[2] } }], checked: todoMatch[1] === "x" },
+    to_do: { rich_text: parseRichText(todoMatch[2]), checked: todoMatch[1] === "x" },
   };
-  const bulletMatch = trimmed.match(/^- (.+)/);
-  const hasIndent = line.length > line.trimStart().length;
-  if (bulletMatch && !hasIndent) return {
+  const numberedMatch = trimmed.match(/^\d+\. (.*)/);
+  if (numberedMatch) return {
+    object: "block", type: "numbered_list_item",
+    numbered_list_item: { rich_text: parseRichText(numberedMatch[1]) },
+  };
+  const bulletMatch = trimmed.match(/^- (.*)/);
+  if (bulletMatch) return {
     object: "block", type: "bulleted_list_item",
-    bulleted_list_item: { rich_text: [{ type: "text", text: { content: bulletMatch[1] } }] },
+    bulleted_list_item: { rich_text: parseRichText(bulletMatch[1]) },
   };
   return {
     object: "block", type: "paragraph",
-    paragraph: { rich_text: [{ type: "text", text: { content: line } }] },
+    paragraph: { rich_text: parseRichText(trimmed || line) },
   };
 }
 

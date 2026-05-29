@@ -112,10 +112,68 @@ function parseLines(content: string) {
     const trimmed = line.trimStart();
     const todo = trimmed.match(/^- \[(x| )\] (.+)/);
     if (todo) return { type: "todo" as const, checked: todo[1]==="x", text: todo[2], indent };
+    const numbered = trimmed.match(/^(\d+)\. (.+)/);
+    if (numbered) return { type: "numbered" as const, num: parseInt(numbered[1]), text: numbered[2], indent };
     const bullet = trimmed.match(/^- (.+)/);
     if (bullet) return { type: "bullet" as const, text: bullet[1], indent };
     return { type: "para" as const, text: line, indent: 0 };
   });
+}
+
+// Clean inline markdown renderer for MemoContent display (no invisible markers needed)
+function renderInlineMarkdown(text: string): React.ReactNode {
+  if (!text) return null;
+  const regex = /\*\*([\s\S]+?)\*\*|_([\s\S]+?)_|~~([\s\S]+?)~~|`([\s\S]+?)`/g;
+  const parts: React.ReactNode[] = [];
+  let last = 0; let k = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) parts.push(<span key={k++}>{text.slice(last, m.index)}</span>);
+    if      (m[1] !== undefined) parts.push(<strong key={k++}>{m[1]}</strong>);
+    else if (m[2] !== undefined) parts.push(<em key={k++}>{m[2]}</em>);
+    else if (m[3] !== undefined) parts.push(<span key={k++} style={{ textDecoration: "line-through", opacity: 0.55 }}>{m[3]}</span>);
+    else if (m[4] !== undefined) parts.push(<code key={k++} style={{ background: "rgba(0,0,0,0.07)", borderRadius: 3, padding: "0 3px", fontFamily: "monospace", fontSize: "0.88em" }}>{m[4]}</code>);
+    last = regex.lastIndex;
+  }
+  if (last < text.length) parts.push(<span key={k++}>{text.slice(last)}</span>);
+  return parts.length > 0 ? <>{parts}</> : <>{text}</>;
+}
+
+// Inline markdown renderer for the textarea overlay — invisible raw markers preserve flow width,
+// formatted content overlaid absolutely so caret positions stay accurate.
+function renderPreviewInline(text: string): React.ReactNode {
+  if (!text) return null;
+  const regex = /\*\*([\s\S]+?)\*\*|_([\s\S]+?)_|~~([\s\S]+?)~~|`([\s\S]+?)`/g;
+  const parts: React.ReactNode[] = [];
+  let last = 0; let k = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) parts.push(<span key={k++}>{text.slice(last, m.index)}</span>);
+    if (m[1] !== undefined) {
+      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
+        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
+        <span style={{ position: "absolute", left: 0, top: 0, fontWeight: "bold" }}>{m[1]}</span>
+      </span>);
+    } else if (m[2] !== undefined) {
+      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
+        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
+        <span style={{ position: "absolute", left: 0, top: 0, fontStyle: "italic" }}>{m[2]}</span>
+      </span>);
+    } else if (m[3] !== undefined) {
+      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
+        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
+        <span style={{ position: "absolute", left: 0, top: 0, textDecoration: "line-through", opacity: 0.55 }}>{m[3]}</span>
+      </span>);
+    } else if (m[4] !== undefined) {
+      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
+        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
+        <span style={{ position: "absolute", left: 0, top: 0, background: "rgba(0,0,0,0.07)", borderRadius: 3, padding: "0 3px", fontFamily: "monospace", fontSize: "0.88em" }}>{m[4]}</span>
+      </span>);
+    }
+    last = regex.lastIndex;
+  }
+  if (last < text.length) parts.push(<span key={k++}>{text.slice(last)}</span>);
+  return parts.length > 0 ? <>{parts}</> : <>{text}</>;
 }
 
 function renderInputPreview(text: string): React.ReactNode {
@@ -130,7 +188,6 @@ function renderInputPreview(text: string): React.ReactNode {
     if (todo) return (
       <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
         {indentSpan}
-        {/* invisible raw marker reserves the exact same width as the textarea */}
         <span style={{ position: "relative", flexShrink: 0 }}>
           <span style={{ opacity: 0, whiteSpace: "pre" }}>{todo[1]}</span>
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: todo[2]==="x" ? 0.35 : 0.6 }}>
@@ -140,7 +197,15 @@ function renderInputPreview(text: string): React.ReactNode {
             </svg>
           </span>
         </span>
-        <span style={{ textDecoration: todo[2]==="x" ? "line-through" : "none", opacity: todo[2]==="x" ? 0.4 : 1 }}>{todo[3]}</span>
+        <span style={{ textDecoration: todo[2]==="x" ? "line-through" : "none", opacity: todo[2]==="x" ? 0.4 : 1 }}>{renderPreviewInline(todo[3])}</span>
+      </div>
+    );
+    const numbered = rest.match(/^(\d+\. )(.*)$/);
+    if (numbered) return (
+      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
+        {indentSpan}
+        <span style={{ opacity: 0.55, whiteSpace: "pre", flexShrink: 0 }}>{numbered[1]}</span>
+        <span>{renderPreviewInline(numbered[2])}</span>
       </div>
     );
     const bullet = rest.match(/^(- )(.*)$/);
@@ -151,10 +216,10 @@ function renderInputPreview(text: string): React.ReactNode {
           <span style={{ opacity: 0, whiteSpace: "pre" }}>{bullet[1]}</span>
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.5, fontSize: 11 }}>•</span>
         </span>
-        <span>{bullet[2]}</span>
+        <span>{renderPreviewInline(bullet[2])}</span>
       </div>
     );
-    return <div key={i} style={{ minHeight: "1.5em" }}>{line || <>&nbsp;</>}</div>;
+    return <div key={i} style={{ minHeight: "1.5em" }}>{renderPreviewInline(line) || <>&nbsp;</>}</div>;
   });
 }
 
@@ -185,7 +250,7 @@ function MemoContent({ content, todos, onToggle }: {
                   {line.checked && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
                 </svg>
               </span>
-              <span style={{ textDecoration: line.checked ? "line-through" : "none", opacity: line.checked ? 0.4 : 1, wordBreak: "break-word" }}>{line.text}</span>
+              <span style={{ textDecoration: line.checked ? "line-through" : "none", opacity: line.checked ? 0.4 : 1, wordBreak: "break-word" }}>{renderInlineMarkdown(line.text)}</span>
             </div>
           );
         }
@@ -193,11 +258,19 @@ function MemoContent({ content, todos, onToggle }: {
           return (
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
               <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 11, height: "1.4em", display: "flex", alignItems: "center" }}>•</span>
-              <span style={{ wordBreak: "break-word" }}>{line.text}</span>
+              <span style={{ wordBreak: "break-word" }}>{renderInlineMarkdown(line.text)}</span>
             </div>
           );
         }
-        return <div key={i} style={{ paddingLeft: line.indent * 14 }}>{line.text || <>&nbsp;</>}</div>;
+        if (line.type === "numbered") {
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
+              <span style={{ flexShrink: 0, opacity: 0.6, fontSize: 11, height: "1.4em", display: "flex", alignItems: "center", minWidth: 14 }}>{line.num}.</span>
+              <span style={{ wordBreak: "break-word" }}>{renderInlineMarkdown(line.text)}</span>
+            </div>
+          );
+        }
+        return <div key={i} style={{ paddingLeft: line.indent * 14 }}>{renderInlineMarkdown(line.text) || <>&nbsp;</>}</div>;
       })}
       {!expanded && hiddenCount > 0 && (
         <button onClick={() => setExpanded(true)}
@@ -263,6 +336,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
   const [editing, setEditing]   = useState(false);
   const [editText, setEditText] = useState(memo.content);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const editCursorRef = useRef<number | null>(null);
   const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 답글/수정/삭제 row: only appears when hovering the bubble's right side, and
@@ -277,6 +351,14 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
     ? "var(--reply-bubble-color)"
     : folderBubbleColor || (folderColor ? folderToBubbleColor(folderColor) : "var(--msg-bubble-color)");
   const textColor = isImportant ? "var(--reply-text-color)" : "var(--msg-text-color)";
+
+  useLayoutEffect(() => {
+    if (editCursorRef.current !== null && editRef.current) {
+      const pos = editCursorRef.current;
+      editRef.current.setSelectionRange(pos, pos);
+      editCursorRef.current = null;
+    }
+  }, [editText]);
 
   function copyText() { navigator.clipboard.writeText(memo.content).catch(() => {}); }
   function startEdit() { setEditText(memo.content); setEditing(true); setTimeout(() => editRef.current?.focus(), 30); }
@@ -306,7 +388,28 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
               whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden",
             }}>{renderInputPreview(editText)}</div>
             <textarea ref={editRef} value={editText} onChange={e => setEditText(applyMarkdownShortcuts(e.target.value))}
-              onKeyDown={e => { if (e.key === "Enter" && e.metaKey) saveEdit(); if (e.key === "Escape") cancelEdit(); }}
+              onKeyDown={e => {
+                if (e.key === "Enter" && e.metaKey) { saveEdit(); return; }
+                if (e.key === "Escape") { cancelEdit(); return; }
+                if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "b") {
+                  e.preventDefault();
+                  const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const end = ta.selectionEnd ?? 0; const v = ta.value;
+                  if (s === end) { editCursorRef.current = s + 2; setEditText(v.slice(0, s) + "****" + v.slice(s)); }
+                  else { editCursorRef.current = end + 4; setEditText(v.slice(0, s) + "**" + v.slice(s, end) + "**" + v.slice(end)); }
+                }
+                if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "i") {
+                  e.preventDefault();
+                  const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const end = ta.selectionEnd ?? 0; const v = ta.value;
+                  if (s === end) { editCursorRef.current = s + 1; setEditText(v.slice(0, s) + "__" + v.slice(s)); }
+                  else { editCursorRef.current = end + 2; setEditText(v.slice(0, s) + "_" + v.slice(s, end) + "_" + v.slice(end)); }
+                }
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "s" || e.key === "S" || e.key === "x" || e.key === "X")) {
+                  e.preventDefault();
+                  const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const end = ta.selectionEnd ?? 0; const v = ta.value;
+                  if (s === end) { editCursorRef.current = s + 2; setEditText(v.slice(0, s) + "~~~~" + v.slice(s)); }
+                  else { editCursorRef.current = end + 4; setEditText(v.slice(0, s) + "~~" + v.slice(s, end) + "~~" + v.slice(end)); }
+                }
+              }}
               className="y2k-input"
               style={{ display: "block", width: "100%", padding: "9px 14px", border: "1px solid var(--accent)", borderRadius: "12px 12px 2px 12px", fontSize: 13, color: "transparent", caretColor: "var(--msg-text-color)", lineHeight: 1.4, background: "var(--msg-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 72, outline: "none", boxSizing: "border-box" }} />
           </div>
@@ -780,6 +883,25 @@ export default function WidgetPage() {
         cursorPosRef.current = start + 2;
         setInputText(val.slice(0, lineStart) + "  " + val.slice(lineStart));
       }
+    }
+    // Notion-style inline formatting shortcuts
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "b") {
+      e.preventDefault();
+      const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const end = ta.selectionEnd ?? 0; const v = ta.value;
+      if (s === end) { cursorPosRef.current = s + 2; setInputText(v.slice(0, s) + "****" + v.slice(s)); }
+      else { cursorPosRef.current = end + 4; setInputText(v.slice(0, s) + "**" + v.slice(s, end) + "**" + v.slice(end)); }
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "i") {
+      e.preventDefault();
+      const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const end = ta.selectionEnd ?? 0; const v = ta.value;
+      if (s === end) { cursorPosRef.current = s + 1; setInputText(v.slice(0, s) + "__" + v.slice(s)); }
+      else { cursorPosRef.current = end + 2; setInputText(v.slice(0, s) + "_" + v.slice(s, end) + "_" + v.slice(end)); }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "s" || e.key === "S" || e.key === "x" || e.key === "X")) {
+      e.preventDefault();
+      const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const end = ta.selectionEnd ?? 0; const v = ta.value;
+      if (s === end) { cursorPosRef.current = s + 2; setInputText(v.slice(0, s) + "~~~~" + v.slice(s)); }
+      else { cursorPosRef.current = end + 4; setInputText(v.slice(0, s) + "~~" + v.slice(s, end) + "~~" + v.slice(end)); }
     }
   }
 
