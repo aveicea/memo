@@ -280,6 +280,15 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
 
   if (memo.pending) return <PendingBubble />;
 
+  function handleDragStart(e: React.DragEvent) {
+    e.dataTransfer.setData("text/plain", memo.id);
+    e.dataTransfer.effectAllowed = "move";
+    (e.currentTarget as HTMLElement).style.opacity = "0.5";
+  }
+  function handleDragEnd(e: React.DragEvent) {
+    (e.currentTarget as HTMLElement).style.opacity = "1";
+  }
+
   if (editing) {
     return (
       <div style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -309,7 +318,10 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
 
   return (
     <div data-guestbook-entry-id={memo.id}
-      style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: "default" }}>
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: "grab" }}>
 
       <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ width: "100%", display: "flex", flexDirection: "column", gap: 0 }}>
@@ -417,6 +429,7 @@ export default function WidgetPage() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<{ blob: Blob; preview: string }[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const cursorPosRef = useRef<number | null>(null);
@@ -893,7 +906,10 @@ export default function WidgetPage() {
                   <div key={f} style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
                     <span style={{ color:"var(--accent)", opacity:0.3, fontSize:9 }}>|</span>
                     <button className="y2k-folder-btn" onClick={() => setFolder(f)}
-                      style={{ background:"none", border:"none", cursor:"pointer", padding:"0 9px", fontSize:12, fontWeight: activeFolder===f ? 700 : 500, fontFamily:"inherit", color:"var(--text-color)", opacity: activeFolder===f ? 1 : 0.55, lineHeight:"35px", height:35, borderRadius:0, transition:"all 0.15s", whiteSpace:"nowrap" }}>
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolder(f); }}
+                      onDragLeave={() => setDragOverFolder(null)}
+                      onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData("text/plain"); if (id) updateMemo(id, { folder: f }); setDragOverFolder(null); }}
+                      style={{ background: dragOverFolder===f ? "var(--accent-light)" : "none", border:"none", cursor:"pointer", padding:"0 9px", fontSize:12, fontWeight: activeFolder===f ? 700 : 500, fontFamily:"inherit", color:"var(--text-color)", opacity: activeFolder===f ? 1 : 0.55, lineHeight:"35px", height:35, borderRadius:4, transition:"all 0.15s", whiteSpace:"nowrap", outline: dragOverFolder===f ? "2px dashed var(--accent)" : "none" }}>
                       {f}
                     </button>
                   </div>
@@ -948,14 +964,26 @@ export default function WidgetPage() {
                 const label = item.type === "pinned" ? "고정" : item.type === "important" ? "중요" : item.label!;
                 const color = isSpecial ? "var(--accent)" : item.color!;
                 const isActive = activeFolder === label;
+                const isDragOver = !isSpecial && dragOverFolder === label;
                 return (
                   <div key={i} className="y2k-folder-btn"
                     onClick={() => setFolder(label)}
+                    onDragOver={isSpecial ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolder(label); }}
+                    onDragLeave={isSpecial ? undefined : () => setDragOverFolder(null)}
+                    onDrop={isSpecial ? undefined : e => {
+                      e.preventDefault();
+                      const memoId = e.dataTransfer.getData("text/plain");
+                      if (memoId) updateMemo(memoId, { folder: label });
+                      setDragOverFolder(null);
+                    }}
                     style={{
                       display:"flex", flexDirection:"column", alignItems:"center", gap:1,
-                      padding:"3px 4px", borderRadius:0, cursor:"pointer",
-                      pointerEvents:"auto", background:"transparent",
-                      transition:"background 0.15s, transform 0.15s",
+                      padding:"3px 4px", borderRadius:4, cursor:"pointer",
+                      pointerEvents:"auto",
+                      background: isDragOver ? `${color}30` : "transparent",
+                      outline: isDragOver ? `2px dashed ${color}` : "none",
+                      transform: isDragOver ? "scale(1.12)" : "scale(1)",
+                      transition:"background 0.12s, transform 0.12s, outline 0.12s",
                       ...(isSpecial ? { justifySelf:"end" } : {}),
                     }}>
                     <div style={{ pointerEvents:"none", opacity: isActive ? 1 : 0.7 }}>
