@@ -21,7 +21,7 @@ interface Config {
   replyBubbleBg?: string; replyTextColor?: string;
   alignLeft?: boolean;
   folderProp?: string; pinnedProp?: string;
-  importantProp?: string; replyProp?: string;
+  importantProp?: string; replyProp?: string; dateProp?: string;
 }
 
 function hex2hsl(hex: string): [number, number, number] {
@@ -311,36 +311,31 @@ function MemoBubble({ memo, folderColor, onPin, onImportant, onDelete, onToggle,
         {/* ROW: left buttons + bubble — always hug the right edge */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
 
-          {/* LEFT ACTIONS: space reserved from the start so nothing reflows on hover */}
-          <div style={{ width: 66, flexShrink: 0, display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-end" }}>
-            {/* PIN — hover (gray) or when active */}
-            <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                color: memo.pinned ? "var(--accent)" : "#ccc",
-                opacity: (hover || memo.pinned) ? 1 : 0, pointerEvents: (hover || memo.pinned) ? "auto" : "none",
-                transition: "color 0.15s, opacity 0.15s" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
-            ><PinIcon /></button>
-
-            {/* HEART — hover (gray) or when active */}
-            <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                color: memo.important ? "var(--accent)" : "#ccc",
-                opacity: (hover || memo.important) ? 1 : 0, pointerEvents: (hover || memo.important) ? "auto" : "none",
-                transition: "color 0.15s, opacity 0.15s", fontSize: 13 }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
-            >♥</button>
-
-            {/* COPY — hover only, rightmost (next to bubble) */}
-            <button onClick={copyText} title="복사"
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc",
-                opacity: hover ? 1 : 0, pointerEvents: hover ? "auto" : "none",
-                transition: "color 0.15s, opacity 0.15s" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
-            ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          {/* LEFT ACTIONS: collapse to 0 when inactive, no gap */}
+          <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+            <div style={{ maxWidth: (hover || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
+                  color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
+              ><PinIcon /></button>
+            </div>
+            <div style={{ maxWidth: (hover || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
+                  color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
+              >♥</button>
+            </div>
+            <div style={{ maxWidth: hover ? 22 : 0, overflow: "hidden", opacity: hover ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={copyText} title="복사"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc", transition: "color 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
+              ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            </div>
           </div>
 
           {/* BUBBLE */}
@@ -592,6 +587,7 @@ export default function WidgetPage() {
           token: cfg.token, databaseId: cfg.databaseId, content: text,
           folder: targetFolder, folderProp: cfg.folderProp,
           pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp,
+          dateProp: cfg.dateProp,
           imageUploadIds,
         }),
       });
@@ -685,6 +681,42 @@ export default function WidgetPage() {
         setInputText(val.slice(0, start) + insert + val.slice(start));
       }
       return;
+    }
+    if (e.key === "ArrowLeft" && !e.shiftKey) {
+      const ta = e.currentTarget;
+      const pos = ta.selectionStart ?? 0;
+      const val = ta.value;
+      const lineStart = val.lastIndexOf("\n", pos - 1) + 1;
+      const prefixMatch = val.slice(lineStart).match(/^(\s*)(- \[[ x]\] |- )/);
+      if (prefixMatch) {
+        const editStart = lineStart + prefixMatch[0].length;
+        if (pos > lineStart && pos <= editStart) {
+          e.preventDefault();
+          ta.setSelectionRange(editStart, editStart);
+          return;
+        }
+      }
+    }
+    if (e.key === "ArrowUp" && !e.shiftKey) {
+      const ta = e.currentTarget;
+      const pos = ta.selectionStart ?? 0;
+      const val = ta.value;
+      const lineStart = val.lastIndexOf("\n", pos - 1) + 1;
+      if (lineStart > 0) {
+        const prevLineEnd = lineStart - 1;
+        const prevLineStart = val.lastIndexOf("\n", prevLineEnd - 1) + 1;
+        const prevLine = val.slice(prevLineStart, prevLineEnd);
+        const prevPrefixMatch = prevLine.match(/^(\s*)(- \[[ x]\] |- )/);
+        if (prevPrefixMatch) {
+          const prevEditStart = prevLineStart + prevPrefixMatch[0].length;
+          const col = pos - lineStart;
+          if (prevLineStart + col < prevEditStart) {
+            e.preventDefault();
+            ta.setSelectionRange(prevEditStart, prevEditStart);
+            return;
+          }
+        }
+      }
     }
     if (e.key === "Tab") {
       e.preventDefault();
@@ -856,8 +888,8 @@ export default function WidgetPage() {
             </div>
             <div className="y2k-win-btn" onClick={() => setMinimized(v => !v)} title={minimized ? "펼치기" : "최소화"}
               style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>{minimized ? "□" : "_"}</div>
-            <div className="y2k-win-btn" onClick={() => { localStorage.removeItem(CONFIG_STORAGE_KEY); router.push("/onboarding"); }}
-              style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, cursor:"pointer", lineHeight:1 }}>x</div>
+            <div className="y2k-win-btn"
+              style={{ width:12, height:12, border:"1px solid var(--accent)", background:"white", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, lineHeight:1 }}>x</div>
           </div>
         </div>
 

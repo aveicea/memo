@@ -15,7 +15,7 @@ interface Design {
 }
 interface Config extends Design {
   token: string; databaseId: string; title: string; folderOptions: string[];
-  folderProp?: string; pinnedProp?: string; importantProp?: string; replyProp?: string;
+  folderProp?: string; pinnedProp?: string; importantProp?: string; replyProp?: string; dateProp?: string;
 }
 
 /* ── theme presets ── */
@@ -78,17 +78,38 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
+/* ── preview helpers ── */
+function hex2hsl(hex: string): [number, number, number] {
+  const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+  const max = Math.max(r,g,b), mn = Math.min(r,g,b);
+  const l = (max+mn)/2;
+  if (max===mn) return [0,0,l*100];
+  const d = max-mn;
+  const s = l>0.5 ? d/(2-max-mn) : d/(max+mn);
+  let h = 0;
+  if (max===r) h = ((g-b)/d + (g<b?6:0))/6;
+  else if (max===g) h = ((b-r)/d+2)/6;
+  else h = ((r-g)/d+4)/6;
+  return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
+}
+function folderToBubbleColor(hex: string): string {
+  if (!hex || !hex.startsWith("#") || hex.length < 7) return "#f5f5f5";
+  const [h, s] = hex2hsl(hex);
+  return `hsl(${h}, ${Math.min(s * 0.25, 20)}%, 95%)`;
+}
+
 /* ── preview ── */
-function Preview({ d }: { d: Design }) {
+function Preview({ d, folderOptions, onClickFolder }: { d: Design; folderOptions: string[]; onClickFolder: (i: number) => void }) {
   const accent = d.accent;
+  const displayFolders = folderOptions.length > 0 ? folderOptions.slice(0, 5) : ["폴더1","폴더2","폴더3"];
   return (
     <div style={{ background:"#f8f8f8", borderRadius:12, padding:12, display:"flex", flexDirection:"column", gap:0, height:"100%", minHeight:380, overflow:"hidden" }}>
       <div style={{ fontSize:10, fontWeight:700, color:"#999", letterSpacing:0.5, marginBottom:8, textAlign:"center" }}>PREVIEW</div>
       <div style={{ flex:1, background:"#fff", borderRadius:8, border:`1px solid ${accent}40`, overflow:"hidden", display:"flex", flexDirection:"column", fontFamily:d.fontFamily }}>
         {/* titlebar */}
         <div style={{ background:d.accentLight, borderBottom:`1px solid ${accent}`, padding:"0 8px", height:28, display:"flex", alignItems:"center", gap:0, fontSize:10 }}>
-          {["memo","daily","thanks"].map((f,i) => (
-            <span key={f} style={{ padding:"0 7px", color:i===0?accent:"#888", fontWeight:i===0?700:400, opacity:i===0?1:0.6 }}>{f}</span>
+          {displayFolders.slice(0,3).map((f,i) => (
+            <span key={f} style={{ padding:"0 7px", color:i===0?accent:"#888", fontWeight:i===0?700:400, opacity:i===0?1:0.6, fontSize:9 }}>{f}</span>
           ))}
           <div style={{ flex:1 }}/>
           {[1,1,1].map((_,i)=><div key={i} style={{width:8,height:8,border:`1px solid ${accent}`,marginLeft:2,background:"white"}}/>)}
@@ -96,24 +117,31 @@ function Preview({ d }: { d: Design }) {
         {/* body */}
         <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
           {/* sidebar */}
-          <div style={{ width:48, padding:"8px 4px", display:"flex", flexDirection:"column", gap:4, alignItems:"center", borderRight:`1px solid ${accent}20` }}>
-            {[0,1].map(i => (
-              <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1 }}>
+          <div style={{ width:52, padding:"8px 4px", display:"flex", flexDirection:"column", gap:4, alignItems:"center", borderRight:`1px solid ${accent}20`, overflowY:"auto" }}>
+            {displayFolders.map((name, i) => (
+              <div key={i} onClick={() => onClickFolder(i)}
+                style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, cursor:"pointer" }}
+                title={`${name} 색 변경`}>
                 <FolderSvg size={16} color={d.folderColorPalette[i] ?? accent} />
-                <span style={{ fontSize:7, color:"#888" }}>folder</span>
+                <span style={{ fontSize:7, color:"#888", maxWidth:44, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center" }}>{name}</span>
               </div>
             ))}
           </div>
           {/* memos */}
           <div style={{ flex:1, padding:"6px 8px", display:"flex", flexDirection:"column", gap:3, overflowY:"auto" }}>
-            <div style={{ alignSelf:"flex-end", background:d.msgBubbleBg, border:`1px solid ${accent}20`, borderRadius:"8px 8px 1px 8px", padding:"5px 8px", fontSize:10, color:d.msgTextColor, maxWidth:"80%" }}>
-              오늘의 메모를 남겨요
-            </div>
+            {displayFolders.map((name, i) => {
+              const fc = d.folderColorPalette[i] ?? accent;
+              const bg = folderToBubbleColor(fc);
+              return (
+                <div key={i} onClick={() => onClickFolder(i)}
+                  title={`${name} 말풍선 색 변경`}
+                  style={{ alignSelf:"flex-end", background:bg, border:`1px solid ${fc}40`, borderRadius:"8px 8px 1px 8px", padding:"5px 8px", fontSize:10, color:d.msgTextColor, maxWidth:"80%", cursor:"pointer" }}>
+                  {name}
+                </div>
+              );
+            })}
             <div style={{ alignSelf:"flex-start", background:d.replyBubbleBg, borderRadius:"8px 8px 8px 1px", padding:"5px 8px", fontSize:10, color:d.replyTextColor, maxWidth:"80%" }}>
-              always grateful
-            </div>
-            <div style={{ alignSelf:"flex-end", background:d.msgBubbleBg, border:`1px solid ${accent}20`, borderRadius:"8px 8px 1px 8px", padding:"5px 8px", fontSize:10, color:d.msgTextColor, maxWidth:"80%" }}>
-              always together
+              always grateful ♥
             </div>
           </div>
         </div>
@@ -168,7 +196,7 @@ function Steps({ current }: { current: number }) {
 
 /* ── step 1 ── */
 function Step1({ onNext, onImport }: {
-  onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[]; folderProp?:string; pinnedProp?:string; importantProp?:string; replyProp?:string }) => void;
+  onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[]; folderProp?:string; pinnedProp?:string; importantProp?:string; replyProp?:string; dateProp?:string }) => void;
   onImport: (c: Config) => void;
 }) {
   const [token, setToken]   = useState("");
@@ -209,7 +237,7 @@ function Step1({ onNext, onImport }: {
     const db = dbs.find(d => d.id === selected);
     if (!db) return;
     let folderOptions: string[] = [];
-    let folderProp: string | undefined, pinnedProp: string | undefined, importantProp: string | undefined, replyProp: string | undefined;
+    let folderProp: string | undefined, pinnedProp: string | undefined, importantProp: string | undefined, replyProp: string | undefined, dateProp: string | undefined;
     try {
       const r = await fetch("/api/notion/schema", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ token:token.trim(), databaseId:selected }) });
       const d = await r.json();
@@ -218,8 +246,9 @@ function Step1({ onNext, onImport }: {
       pinnedProp      = d.pinnedPropName ?? undefined;
       importantProp   = d.importantPropName ?? undefined;
       replyProp       = d.replyPropName ?? undefined;
+      dateProp        = d.datePropName ?? undefined;
     } catch { /* ok */ }
-    onNext({ token:token.trim(), databaseId:selected, title:db.title, folderOptions, folderProp, pinnedProp, importantProp, replyProp });
+    onNext({ token:token.trim(), databaseId:selected, title:db.title, folderOptions, folderProp, pinnedProp, importantProp, replyProp, dateProp });
   }
 
   return (
@@ -407,7 +436,7 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
         </div>
 
         {/* RIGHT: PREVIEW */}
-        <Preview d={d} />
+        <Preview d={d} folderOptions={folderOptions} onClickFolder={i => folderRefs[i].current?.click()} />
       </div>
 
       {/* buttons */}

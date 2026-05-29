@@ -170,7 +170,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, databaseId, content, folder, folderProp, pinnedProp, importantProp, imageUploadIds } = await req.json();
+    const { token, databaseId, content, folder, folderProp, pinnedProp, importantProp, dateProp, imageUploadIds } = await req.json();
 
     const lines = (content as string).split("\n");
     const children: unknown[] = lines.filter((l: string) => l.trim() !== "").map(lineToBlock);
@@ -189,6 +189,7 @@ export async function POST(req: NextRequest) {
     if (folderProp && folder) properties[folderProp] = { select: { name: folder } };
     if (pinnedProp)    properties[pinnedProp]    = { checkbox: false };
     if (importantProp) properties[importantProp] = { checkbox: false };
+    if (dateProp) properties[dateProp] = { date: { start: new Date().toISOString() } };
 
     const res = await fetch("https://api.notion.com/v1/pages", {
       method: "POST", headers: hdrs(token),
