@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, CheckCircle2 } from "lucide-react";
+import { CONFIG_STORAGE_KEY, buildShareUrl } from "@/lib/config";
 
 /* ── types ── */
 interface DB { id: string; title: string }
@@ -381,9 +382,18 @@ function Step2({ folderOptions, onNext, onBack }: { folderOptions: string[]; onN
 /* ── step 3 ── */
 function Step3({ config, onBack }: { config: Config; onBack: () => void }) {
   const router = useRouter();
+  const [copied, setCopied] = useState(false);
+  const shareUrl = buildShareUrl(config);
+
   function start() {
-    localStorage.setItem("bubble-memo-config", JSON.stringify(config));
+    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
     router.push("/");
+  }
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(shareUrl); }
+    catch { /* clipboard may be unavailable */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
   }
   return (
     <div className="animate-fadeIn" style={{ display:"flex", flexDirection:"column", gap:24, textAlign:"center", maxWidth:500, margin:"0 auto", width:"100%" }}>
@@ -405,6 +415,22 @@ function Step3({ config, onBack }: { config: Config; onBack: () => void }) {
           </div>
         ))}
       </div>
+      {/* shareable link — embeds the whole config in the URL */}
+      <div style={{ background:"#FFF5F9", borderRadius:10, padding:"14px 16px", border:"1px solid #F5C6D0", textAlign:"left" }}>
+        <div style={{ fontSize:11, fontWeight:700, color:"#E8A8C0", marginBottom:8, letterSpacing:0.3 }}>✦ 공유 링크</div>
+        <p style={{ fontSize:11, color:"#aaa", lineHeight:1.5, margin:"0 0 10px" }}>
+          이 링크를 열면 설정이 자동으로 적용돼요. 다른 기기나 위젯 임베드에 붙여넣으세요.
+        </p>
+        <div style={{ display:"flex", gap:6 }}>
+          <input readOnly value={shareUrl} onFocus={e => e.currentTarget.select()}
+            style={{ flex:1, padding:"9px 12px", border:"1px solid #F5C6D0", background:"#fff", fontSize:11, color:"#777", borderRadius:8, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", boxSizing:"border-box" }} />
+          <button onClick={copyLink}
+            style={{ flexShrink:0, padding:"0 16px", fontSize:12, fontWeight:600, background: copied ? "#9AE6B4" : "#fff", color: copied ? "#276749" : "#E8A8C0", border:`1px solid ${copied ? "#9AE6B4" : "#F5C6D0"}`, borderRadius:8, cursor:"pointer", fontFamily:"inherit", transition:"all 0.2s" }}>
+            {copied ? "복사됨!" : "복사"}
+          </button>
+        </div>
+      </div>
+
       <div style={{ display:"flex", gap:8 }}>
         <button onClick={onBack} style={{ flex:1, padding:"12px 0", fontSize:13, fontWeight:500, border:"1px solid #F5C6D0", background:"transparent", color:"#999", borderRadius:10, cursor:"pointer", fontFamily:"inherit" }}>이전</button>
         <button onClick={start}  style={{ flex:1, padding:"12px 0", fontSize:13, fontWeight:600, background:"#E8A8C0", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 4px 12px rgba(232,168,192,0.3)" }}>시작하기 ✨</button>
