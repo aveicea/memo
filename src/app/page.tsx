@@ -409,6 +409,20 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, onPin, onImportant, 
                   if (s === end) { editCursorRef.current = s + 2; setEditText(v.slice(0, s) + "~~~~" + v.slice(s)); }
                   else { editCursorRef.current = end + 4; setEditText(v.slice(0, s) + "~~" + v.slice(s, end) + "~~" + v.slice(end)); }
                 }
+                if (e.key === "Tab") {
+                  e.preventDefault();
+                  const ta = e.currentTarget; const s = ta.selectionStart ?? 0; const v = ta.value;
+                  const lineStart = v.lastIndexOf("\n", s - 1) + 1;
+                  if (e.shiftKey) {
+                    if (v.slice(lineStart, lineStart + 2) === "  ") {
+                      editCursorRef.current = Math.max(s - 2, lineStart);
+                      setEditText(v.slice(0, lineStart) + v.slice(lineStart + 2));
+                    }
+                  } else {
+                    editCursorRef.current = s + 2;
+                    setEditText(v.slice(0, lineStart) + "  " + v.slice(lineStart));
+                  }
+                }
               }}
               className="y2k-input"
               style={{ display: "block", width: "100%", padding: "9px 14px", border: "1px solid var(--accent)", borderRadius: "12px 12px 2px 12px", fontSize: 13, color: "transparent", caretColor: "var(--msg-text-color)", lineHeight: 1.4, background: "var(--msg-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 72, outline: "none", boxSizing: "border-box" }} />
