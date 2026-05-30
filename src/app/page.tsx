@@ -808,6 +808,19 @@ export default function WidgetPage() {
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   }, [inputText]);
 
+  // On mobile, keep scroll pinned to bottom when keyboard opens/closes
+  useEffect(() => {
+    if (!mobile) return;
+    const handler = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      if (nearBottom) setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+    };
+    window.visualViewport?.addEventListener("resize", handler);
+    return () => window.visualViewport?.removeEventListener("resize", handler);
+  }, [mobile]);
+
   // Restore cursor after Tab indentation / Shift+Enter list continuation.
   // Layout effect runs before paint so the caret never visibly jumps.
   useLayoutEffect(() => {
@@ -1209,8 +1222,8 @@ export default function WidgetPage() {
         boxSizing:"border-box", fontFamily:"var(--widget-font-family, inherit)",
       }}>
 
-        {/* Safe-area fill above header on mobile — extends header bg into status bar */}
-        {mobile && <div style={{ height:"env(safe-area-inset-top,0px)", background:"var(--accent-light)", flexShrink:0 }} />}
+        {/* Safe-area fill above header on mobile */}
+        {mobile && <div style={{ height:"env(safe-area-inset-top,0px)", background:"#ffffff", flexShrink:0 }} />}
 
         {/* Header */}
         <div style={{
@@ -1341,7 +1354,7 @@ export default function WidgetPage() {
 
           {/* Memo list */}
           <div ref={scrollRef} className="y2k-scroll"
-            style={{ flex:1, minHeight:0, overflowY:"auto", padding:"8px 14px 8px 8px" }}>
+            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"8px 14px 8px 8px" }}>
 
             {loading && memos.length === 0 && (
               <div style={{ padding:40, textAlign:"center", color:"var(--accent)", fontSize:13 }}>
