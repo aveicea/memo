@@ -536,6 +536,7 @@ function Step3({ config, onBack }: { config: Config; onBack: () => void }) {
 
 /* ── main ── */
 export default function OnboardingPage() {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState<Config>({
     token:"", databaseId:"", title:"", folderOptions:[],
@@ -547,10 +548,11 @@ export default function OnboardingPage() {
     setStep(2);
   }
   function handleImport(c: Config) {
-    // A pasted share link fully populates the config; jump to design so the
-    // user can review/edit, then land on the completion + new-link screen.
-    setConfig({ ...c, folderColorPalette: [...(c.folderColorPalette ?? DEFAULT_DESIGN.folderColorPalette)] });
-    setStep(2);
+    // Save to localStorage and jump directly to the widget — the link already
+    // contains a complete config so there's nothing left to set up.
+    const merged = { ...c, folderColorPalette: [...(c.folderColorPalette ?? DEFAULT_DESIGN.folderColorPalette)] };
+    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(merged));
+    router.push("/");
   }
   function handleStep2(d: Design) {
     setConfig(prev => ({ ...prev, ...d }));

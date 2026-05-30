@@ -76,6 +76,15 @@ function buildCssVars(cfg: Config): string {
   `;
 }
 
+function DynamicThemeColor({ color }: { color: string }) {
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    if (!meta) { meta = document.createElement("meta"); meta.name = "theme-color"; document.head.appendChild(meta); }
+    meta.content = color;
+  }, [color]);
+  return null;
+}
+
 const FolderIcon = ({ size=25, fill, stroke }: { size?: number; fill: string; stroke: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>
@@ -247,9 +256,9 @@ function MemoContent({ content, todos, onToggle }: {
         if (line.type === "todo") {
           const tid = findTodo(line.text, line.checked);
           return (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, cursor: "pointer", paddingLeft: line.indent * 14 }}
-              onClick={() => tid && onToggle(tid, !line.checked)}>
-              <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: line.checked ? 0.35 : 0.6 }}>
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
+              <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: line.checked ? 0.35 : 0.6, cursor: tid ? "pointer" : "default" }}
+                onClick={() => tid && onToggle(tid, !line.checked)}>
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
                   {line.checked && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
@@ -301,34 +310,130 @@ function PendingBubble() {
   );
 }
 
-function ReplyBubble({ text, first, onReply, mobile }: { text: string; first: boolean; onReply: () => void; mobile?: boolean }) {
+function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: {
+  text: string; first: boolean; index: number;
+  onReply: () => void; onEdit: (t: string) => void; onDelete: () => void; mobile?: boolean;
+}) {
   const [hover, setHover] = useState(false);
-  function copy() { navigator.clipboard.writeText(text).catch(() => {}); }
+  const [showActions, setShowActions] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(text);
+  const [copied, setCopied] = useState(false);
+  const editRef = useRef<HTMLTextAreaElement>(null);
+
+  function copy() {
+    navigator.clipboard.writeText(text).catch(() => {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); document.body.removeChild(ta);
+    });
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
+  function handleToggle(todoText: string, checked: boolean) {
+    const from = `- [${checked ? " " : "x"}] ${todoText}`;
+    const to   = `- [${checked ? "x" : " "}] ${todoText}`;
+    onEdit(text.replace(from, to));
+  }
+  function startEdit() { setEditText(text); setEditing(true); setTimeout(() => editRef.current?.focus(), 30); }
+  function saveEdit() { if (editText.trim()) onEdit(editText.trim()); setEditing(false); }
+  function cancelEdit() { setEditText(text); setEditing(false); }
+
+  const show = hover || showActions;
+  const lines = parseLines(text);
   const iconBtn = { background: "none", border: "none", cursor: "pointer", padding: 2, color: "#bbb", lineHeight: 1, transition: "color 0.15s" } as const;
-  const show = hover || mobile;
+
+  if (editing) {
+    return (
+      <div style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ position: "relative" }}>
+          <div aria-hidden style={{
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+            padding: mobile ? "10px 14px" : "8px 12px", fontSize: mobile ? 15 : 13, fontFamily: "inherit", lineHeight: 1.4,
+            color: "var(--reply-text-color)", pointerEvents: "none",
+            whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden",
+          }}>{renderInputPreview(editText)}</div>
+          <textarea ref={editRef} value={editText} onChange={e => setEditText(applyMarkdownShortcuts(e.target.value))}
+            onKeyDown={e => {
+              if (e.key === "Enter" && e.metaKey) { saveEdit(); return; }
+              if (e.key === "Escape") { cancelEdit(); return; }
+            }}
+            className="y2k-input"
+            style={{ display: "block", width: "100%", padding: mobile ? "10px 14px" : "8px 12px", border: "1px solid var(--reply-bubble-color)", borderRadius: "12px 12px 12px 2px", fontSize: mobile ? 15 : 13, color: "transparent", caretColor: "var(--reply-text-color)", lineHeight: 1.4, background: "var(--reply-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 60, outline: "none", boxSizing: "border-box" }} />
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={cancelEdit} style={{ background: "none", border: "1px solid var(--border-color)", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#aaa", cursor: "pointer", fontFamily: "inherit" }}>취소</button>
+          <button onClick={saveEdit} style={{ background: "var(--reply-bubble-color)", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "var(--reply-text-color)", cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>저장</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", alignItems: "center", gap: 3 }}>
-      <div style={{
-        background: "var(--reply-bubble-color)", padding: mobile ? "10px 14px" : "8px 12px",
-        borderRadius: "12px 12px 12px 2px", fontSize: mobile ? 15 : 13,
-        color: "var(--reply-text-color)", lineHeight: 1.4,
-        wordBreak: "break-word", whiteSpace: "pre-wrap", fontFamily: "inherit",
-      }}>{text}</div>
-      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", flexShrink: 0,
-        opacity: show ? 1 : 0, pointerEvents: show ? "auto" : "none", transition: "opacity 0.15s" }}>
-        <button onClick={onReply} title="답글" style={iconBtn}
-          onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")} onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}><ReplyIcon /></button>
-        <button onClick={copy} title="복사" style={iconBtn}
+      style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", flexDirection: "column", gap: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+        <div onClick={mobile ? () => setShowActions(v => !v) : undefined}
+          style={{
+            background: "var(--reply-bubble-color)", padding: mobile ? "10px 14px" : "8px 12px",
+            borderRadius: "12px 12px 12px 2px", fontSize: mobile ? 15 : 13,
+            color: "var(--reply-text-color)", lineHeight: 1.4,
+            wordBreak: "break-word", fontFamily: "inherit", cursor: mobile ? "pointer" : "default",
+          }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {lines.map((line, li) => {
+              if (line.type === "todo") return (
+                <div key={li} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
+                  <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: line.checked ? 0.5 : 0.8, cursor: "pointer" }}
+                    onClick={e => { e.stopPropagation(); handleToggle(line.text, line.checked); }}>
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+                      {line.checked && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
+                    </svg>
+                  </span>
+                  <span style={{ textDecoration: line.checked ? "line-through" : "none", opacity: line.checked ? 0.55 : 1, wordBreak: "break-word" }}>{renderInlineMarkdown(line.text)}</span>
+                </div>
+              );
+              if (line.type === "bullet") return (
+                <div key={li} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
+                  <span style={{ flexShrink: 0, opacity: 0.7, fontSize: 11, height: "1.4em", display: "flex", alignItems: "center" }}>•</span>
+                  <span style={{ wordBreak: "break-word" }}>{renderInlineMarkdown(line.text)}</span>
+                </div>
+              );
+              if (line.type === "numbered") return (
+                <div key={li} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
+                  <span style={{ flexShrink: 0, opacity: 0.7, fontSize: 11, height: "1.4em", display: "flex", alignItems: "center", minWidth: 14 }}>{line.num}.</span>
+                  <span style={{ wordBreak: "break-word" }}>{renderInlineMarkdown(line.text)}</span>
+                </div>
+              );
+              return <div key={li} style={{ paddingLeft: line.indent * 14 }}>{renderInlineMarkdown(line.text) || <>&nbsp;</>}</div>;
+            })}
+          </div>
+        </div>
+        <button onClick={copy} title={copied ? "복사됨" : "복사"} style={{ ...iconBtn, opacity: show ? 1 : 0, pointerEvents: show ? "auto" : "none", transition: "opacity 0.15s" }}
           onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")} onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          {copied ? <span style={{ fontSize: 9, color: "var(--accent)" }}>✓</span> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
         </button>
+      </div>
+      <div style={{ display: "flex", gap: mobile ? 4 : 1, height: show ? (mobile ? 30 : 20) : 0, overflow: "hidden", transition: "height 0.15s" }}>
+        {[
+          { label: "답글", onClick: onReply, icon: <ReplyIcon /> },
+          { label: "수정", onClick: startEdit, icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
+          { label: "삭제", onClick: onDelete, icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> },
+        ].map(a => (
+          <button key={a.label} onClick={a.onClick} title={a.label}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 10px" : "2px 6px", lineHeight: 1,
+              color: "#bbb", fontSize: mobile ? 12 : 10, fontFamily: "inherit",
+              display: "flex", alignItems: "center", gap: 3, transition: "color 0.15s" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}
+          >{a.icon}{a.label}</button>
+        ))}
       </div>
     </div>
   );
 }
 
-function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImportant, onDelete, onToggle, onEdit, onReply }: {
+function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImportant, onDelete, onToggle, onEdit, onReply, onEditReply, onDeleteReply }: {
   memo: Memo;
   folderColor?: string;
   folderBubbleColor?: string;
@@ -337,11 +442,14 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
   onToggle: (id: string, checked: boolean) => void;
   onEdit: (content: string) => void;
   onReply: () => void;
+  onEditReply: (index: number, text: string) => void;
+  onDeleteReply: (index: number) => void;
 }) {
   const [hover, setHover]       = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [editing, setEditing]   = useState(false);
   const [editText, setEditText] = useState(memo.content);
+  const [copied, setCopied]     = useState(false);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const editCursorRef = useRef<number | null>(null);
   const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -367,7 +475,14 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
     }
   }, [editText]);
 
-  function copyText() { navigator.clipboard.writeText(memo.content).catch(() => {}); }
+  function copyText() {
+    navigator.clipboard.writeText(memo.content).catch(() => {
+      const ta = document.createElement("textarea");
+      ta.value = memo.content; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); document.body.removeChild(ta);
+    });
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
   function startEdit() { setEditText(memo.content); setEditing(true); setTimeout(() => editRef.current?.focus(), 30); }
   function saveEdit() { if (editText.trim() && editText.trim() !== memo.content) onEdit(editText.trim()); setEditing(false); }
   function cancelEdit() { setEditText(memo.content); setEditing(false); }
@@ -458,9 +573,9 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
         {/* ROW: left buttons + bubble — always hug the right edge */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
 
-          {/* LEFT ACTIONS: collapse to 0 when inactive, no gap. On mobile (no hover) keep them reachable. */}
+          {/* LEFT ACTIONS: visible on hover/showActions (desktop), tap to reveal (mobile) */}
           <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-            <div style={{ maxWidth: (hover || mobile || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || mobile || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || showActions || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
@@ -468,7 +583,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
                 onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
               ><PinIcon /></button>
             </div>
-            <div style={{ maxWidth: (hover || mobile || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || mobile || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || showActions || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
@@ -476,12 +591,12 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
                 onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
               >♥</button>
             </div>
-            <div style={{ maxWidth: (hover || mobile) ? 22 : 0, overflow: "hidden", opacity: (hover || mobile) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
-              <button onClick={copyText} title="복사"
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: "#ccc", transition: "color 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
-              ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <div style={{ maxWidth: (hover || showActions) ? 26 : 0, overflow: "hidden", opacity: (hover || showActions) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+              <button onClick={copyText} title={copied ? "복사됨" : "복사"}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1, color: copied ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
+                onMouseEnter={e => { if (!copied) e.currentTarget.style.color = "var(--accent)"; }}
+                onMouseLeave={e => { if (!copied) e.currentTarget.style.color = "#ccc"; }}
+              >{copied ? <span style={{ fontSize: 9, color: "var(--accent)" }}>✓</span> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button>
             </div>
           </div>
 
@@ -537,7 +652,9 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
 
       {/* reply bubbles */}
       {memo.replies.map((r, i) => (
-        <ReplyBubble key={i} text={r} first={i === 0} onReply={onReply} mobile={mobile} />
+        <ReplyBubble key={i} text={r} first={i === 0} index={i} onReply={onReply} mobile={mobile}
+          onEdit={(t) => onEditReply(i, t)}
+          onDelete={() => onDeleteReply(i)} />
       ))}
     </div>
   );
@@ -589,7 +706,6 @@ export default function WidgetPage() {
   }, []);
 
   useEffect(() => {
-    // Sidebar only visible when viewing the default (first) folder tab
     const defaultF = cfg?.folderOptions?.[0] ?? "";
     setShowSidebar(!!defaultF && activeFolder === defaultF);
   }, [activeFolder, cfg]);
@@ -654,7 +770,9 @@ export default function WidgetPage() {
         }, 0);
       } else {
         setMemos(reversed);
-        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 60);
+        // Two-pass scroll: first attempt right after render, second after images/fonts settle
+        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
+        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 300);
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
@@ -800,6 +918,28 @@ export default function WidgetPage() {
     await fetch(`/api/notion/memos/${id}`, {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: cfg.token }),
+    });
+  }
+
+  async function editReply(memoId: string, index: number, text: string) {
+    const memo = memos.find(m => m.id === memoId);
+    if (!memo || !cfg) return;
+    const newReplies = memo.replies.map((r, i) => i === index ? text : r);
+    setMemos(prev => prev.map(m => m.id === memoId ? { ...m, replies: newReplies } : m));
+    await fetch(`/api/notion/memos/${memoId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: cfg.token, replyProp: cfg.replyProp, reply: newReplies.join("|||") }),
+    });
+  }
+
+  async function deleteReply(memoId: string, index: number) {
+    const memo = memos.find(m => m.id === memoId);
+    if (!memo || !cfg) return;
+    const newReplies = memo.replies.filter((_, i) => i !== index);
+    setMemos(prev => prev.map(m => m.id === memoId ? { ...m, replies: newReplies } : m));
+    await fetch(`/api/notion/memos/${memoId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: cfg.token, replyProp: cfg.replyProp, reply: newReplies.join("|||") }),
     });
   }
 
@@ -1038,6 +1178,8 @@ export default function WidgetPage() {
         onToggle={(tid, checked) => toggleTodo(tid, checked, memo.id)}
         onEdit={(content) => editMemo(memo.id, content)}
         onReply={() => { setReplyingTo(memo.id); setTimeout(() => textareaRef.current?.focus(), 50); }}
+        onEditReply={(index, text) => editReply(memo.id, index, text)}
+        onDeleteReply={(index) => deleteReply(memo.id, index)}
       />
     );
   }
@@ -1046,10 +1188,14 @@ export default function WidgetPage() {
     <div style={{
       width:"100%", height:"100dvh", boxSizing:"border-box", overflow:"hidden",
       padding: mobile ? 0 : 16, display:"flex", alignItems:"center", justifyContent:"center",
-      fontFamily: fontFamily, background:"#ffffff",
+      fontFamily: fontFamily, background: mobile ? "var(--accent-light)" : "#ffffff",
     }}>
       <style>{cssVars}</style>
-      {mobile && <style>{`.mobile-memo:hover{transform:none!important;box-shadow:none!important;}`}</style>}
+      {mobile && <style>{`
+        .mobile-memo:hover{transform:none!important;box-shadow:none!important;}
+        meta[name="theme-color"]{content:var(--accent-light);}
+      `}</style>}
+      {mobile && <DynamicThemeColor color={cfg?.accentLight ?? accent} />}
 
       <div className={mobile ? "y2k-widget mobile-memo" : "y2k-widget"} style={{
         width:"100%", maxWidth:"100%", height: minimized ? "auto" : "100%",
@@ -1061,10 +1207,12 @@ export default function WidgetPage() {
 
         {/* Header */}
         <div style={{
-          height: mobile?46:35, background:"var(--accent-light)",
+          height: mobile ? `calc(46px + env(safe-area-inset-top, 0px))` : 35,
+          paddingTop: mobile ? "env(safe-area-inset-top, 0px)" : 0,
+          background:"var(--accent-light)",
           borderBottom:"1px solid var(--accent)",
           display:"flex", alignItems:"center", justifyContent:"space-between",
-          padding:"0 8px 0 10px", fontSize:13, color:"var(--accent)", flexShrink:0,
+          padding:`env(safe-area-inset-top, 0px) 8px 0 10px`, fontSize:13, color:"var(--accent)", flexShrink:0,
         }}>
           <div style={{ display:"flex", gap:4, alignItems:"center", flex:1, minWidth:0, overflow:"hidden" }}>
             <div style={{ display:"flex", alignItems:"center", gap:0, fontSize:12, fontWeight:600, fontFamily:"inherit", minWidth:0, flex:1 }}>
@@ -1238,7 +1386,7 @@ export default function WidgetPage() {
 
         {/* Input form */}
         <form onSubmit={sendMemo} style={{
-          paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 8px) + 8px)" : 8,
+          paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 12px) + 12px)" : 8,
           borderTop:"1px dotted var(--border-dot)",
           display: minimized ? "none" : "flex", flexDirection:"column", background:"var(--bg-color)", flexShrink:0,
         }}>
