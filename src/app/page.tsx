@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CONFIG_STORAGE_KEY, decodeConfig, encodeConfig } from "@/lib/config";
+import { CONFIG_STORAGE_KEY, decodeConfig } from "@/lib/config";
 
 interface Todo { id: string; checked: boolean; text: string }
 interface Memo {
@@ -708,8 +708,6 @@ export default function WidgetPage() {
     if (raw) {
       const parsed = JSON.parse(raw) as Config;
       setCfg(parsed);
-      // Put the share URL in the address bar so user can copy it anytime
-      window.history.replaceState(null, "", `/?config=${encodeConfig(parsed)}`);
     }
     setCfgLoaded(true);
   }, []);
