@@ -548,11 +548,8 @@ export default function OnboardingPage() {
     setStep(2);
   }
   function handleImport(c: Config) {
-    // Save to localStorage and jump directly to the widget — the link already
-    // contains a complete config so there's nothing left to set up.
-    const merged = { ...c, folderColorPalette: [...(c.folderColorPalette ?? DEFAULT_DESIGN.folderColorPalette)] };
-    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(merged));
-    router.push("/");
+    setConfig({ ...c, folderColorPalette: [...(c.folderColorPalette ?? DEFAULT_DESIGN.folderColorPalette)] });
+    setStep(2);
   }
   function handleStep2(d: Design) {
     setConfig(prev => ({ ...prev, ...d }));
