@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CONFIG_STORAGE_KEY, decodeConfig } from "@/lib/config";
+import { CONFIG_STORAGE_KEY, decodeConfig, encodeConfig } from "@/lib/config";
 
 interface Todo { id: string; checked: boolean; text: string }
 interface Memo {
@@ -330,9 +330,16 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
     setCopied(true); setTimeout(() => setCopied(false), 1500);
   }
   function handleToggle(todoText: string, checked: boolean) {
-    const from = `- [${checked ? " " : "x"}] ${todoText}`;
-    const to   = `- [${checked ? "x" : " "}] ${todoText}`;
-    onEdit(text.replace(from, to));
+    const newText = text.split("\n").map(line => {
+      const trimmed = line.trimStart();
+      const prefix = line.slice(0, line.length - trimmed.length);
+      const m = trimmed.match(/^- \[(x| )\] (.+)$/);
+      if (m && m[2] === todoText && (m[1] === "x") === checked) {
+        return prefix + `- [${checked ? " " : "x"}] ` + todoText;
+      }
+      return line;
+    }).join("\n");
+    if (newText !== text) onEdit(newText);
   }
   function startEdit() { setEditText(text); setEditing(true); setTimeout(() => editRef.current?.focus(), 30); }
   function saveEdit() { if (editText.trim()) onEdit(editText.trim()); setEditing(false); }
@@ -344,7 +351,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
 
   if (editing) {
     return (
-      <div style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ alignSelf: "flex-start", width: mobile ? "90%" : "min(340px, 85vw)", marginTop: first ? 6 : 3, display: "flex", flexDirection: "column", gap: 4 }}>
         <div style={{ position: "relative" }}>
           <div aria-hidden style={{
             position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
@@ -358,7 +365,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
               if (e.key === "Escape") { cancelEdit(); return; }
             }}
             className="y2k-input"
-            style={{ display: "block", width: "100%", padding: mobile ? "10px 14px" : "8px 12px", border: "1px solid var(--reply-bubble-color)", borderRadius: "12px 12px 12px 2px", fontSize: mobile ? 15 : 13, color: "transparent", caretColor: "var(--reply-text-color)", lineHeight: 1.4, background: "var(--reply-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 60, outline: "none", boxSizing: "border-box" }} />
+            style={{ display: "block", width: "100%", padding: mobile ? "10px 14px" : "8px 12px", border: "1px solid var(--reply-bubble-color)", borderRadius: "12px 12px 12px 2px", fontSize: mobile ? 15 : 13, color: "transparent", caretColor: "var(--reply-text-color)", lineHeight: 1.4, background: "var(--reply-bubble-color)", fontFamily: "inherit", resize: "none", minHeight: 90, outline: "none", boxSizing: "border-box" }} />
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={cancelEdit} style={{ background: "none", border: "1px solid var(--border-color)", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#aaa", cursor: "pointer", fontFamily: "inherit" }}>취소</button>
@@ -683,8 +690,8 @@ export default function WidgetPage() {
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
-    // 1) A config embedded in the URL (?config=base64) takes priority — this is
-    //    how a shared link bootstraps the widget. Persist it then clean the URL.
+    // 1) A config embedded in the URL (?config=base64) takes priority.
+    //    Keep it in the URL so the user can always copy the share link from the bar.
     const params = new URLSearchParams(window.location.search);
     const encoded = params.get("config");
     if (encoded) {
@@ -693,15 +700,17 @@ export default function WidgetPage() {
         localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(decoded));
         setCfg(decoded);
         setCfgLoaded(true);
-        params.delete("config");
-        const clean = window.location.pathname + (params.toString() ? `?${params}` : "");
-        window.history.replaceState(null, "", clean);
-        return;
+        return; // URL stays as-is — the user can copy it as a share link
       }
     }
     // 2) Otherwise fall back to whatever was saved locally.
     const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
-    if (raw) setCfg(JSON.parse(raw));
+    if (raw) {
+      const parsed = JSON.parse(raw) as Config;
+      setCfg(parsed);
+      // Put the share URL in the address bar so user can copy it anytime
+      window.history.replaceState(null, "", `/?config=${encodeConfig(parsed)}`);
+    }
     setCfgLoaded(true);
   }, []);
 

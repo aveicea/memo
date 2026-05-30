@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, CheckCircle2 } from "lucide-react";
-import { CONFIG_STORAGE_KEY, buildShareUrl, decodeConfig } from "@/lib/config";
+import { CONFIG_STORAGE_KEY, buildShareUrl, decodeConfig, encodeConfig } from "@/lib/config";
 
 /* ── types ── */
 interface DB { id: string; title: string }
@@ -482,7 +482,7 @@ function Step3({ config, onBack }: { config: Config; onBack: () => void }) {
 
   function start() {
     localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
-    router.push("/");
+    router.push(`/?config=${encodeConfig(config)}`);
   }
   async function copyLink() {
     try { await navigator.clipboard.writeText(shareUrl); }
