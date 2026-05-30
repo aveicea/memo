@@ -1188,14 +1188,11 @@ export default function WidgetPage() {
     <div style={{
       width:"100%", height:"100dvh", boxSizing:"border-box", overflow:"hidden",
       padding: mobile ? 0 : 16, display:"flex", alignItems:"center", justifyContent:"center",
-      fontFamily: fontFamily, background: mobile ? "var(--accent-light)" : "#ffffff",
+      fontFamily: fontFamily, background:"#ffffff",
     }}>
       <style>{cssVars}</style>
-      {mobile && <style>{`
-        .mobile-memo:hover{transform:none!important;box-shadow:none!important;}
-        meta[name="theme-color"]{content:var(--accent-light);}
-      `}</style>}
-      {mobile && <DynamicThemeColor color={cfg?.accentLight ?? accent} />}
+      {mobile && <style>{`.mobile-memo:hover{transform:none!important;box-shadow:none!important;}`}</style>}
+      {mobile && <DynamicThemeColor color={accent} />}
 
       <div className={mobile ? "y2k-widget mobile-memo" : "y2k-widget"} style={{
         width:"100%", maxWidth:"100%", height: minimized ? "auto" : "100%",
@@ -1205,14 +1202,15 @@ export default function WidgetPage() {
         boxSizing:"border-box", fontFamily:"var(--widget-font-family, inherit)",
       }}>
 
+        {/* Safe-area fill above header on mobile — extends header bg into status bar */}
+        {mobile && <div style={{ height:"env(safe-area-inset-top,0px)", background:"var(--accent-light)", flexShrink:0 }} />}
+
         {/* Header */}
         <div style={{
-          height: mobile ? `calc(46px + env(safe-area-inset-top, 0px))` : 35,
-          paddingTop: mobile ? "env(safe-area-inset-top, 0px)" : 0,
-          background:"var(--accent-light)",
+          height: mobile?46:35, background:"var(--accent-light)",
           borderBottom:"1px solid var(--accent)",
           display:"flex", alignItems:"center", justifyContent:"space-between",
-          padding:`env(safe-area-inset-top, 0px) 8px 0 10px`, fontSize:13, color:"var(--accent)", flexShrink:0,
+          padding:"0 8px 0 10px", fontSize:13, color:"var(--accent)", flexShrink:0,
         }}>
           <div style={{ display:"flex", gap:4, alignItems:"center", flex:1, minWidth:0, overflow:"hidden" }}>
             <div style={{ display:"flex", alignItems:"center", gap:0, fontSize:12, fontWeight:600, fontFamily:"inherit", minWidth:0, flex:1 }}>
@@ -1386,7 +1384,7 @@ export default function WidgetPage() {
 
         {/* Input form */}
         <form onSubmit={sendMemo} style={{
-          paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 12px) + 12px)" : 8,
+          paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 4px) + 4px)" : 8,
           borderTop:"1px dotted var(--border-dot)",
           display: minimized ? "none" : "flex", flexDirection:"column", background:"var(--bg-color)", flexShrink:0,
         }}>
