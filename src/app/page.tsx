@@ -153,36 +153,29 @@ function renderInlineMarkdown(text: string): React.ReactNode {
   return parts.length > 0 ? <>{parts}</> : <>{text}</>;
 }
 
-// Inline markdown renderer for the textarea overlay — invisible raw markers preserve flow width,
-// formatted content overlaid absolutely so caret positions stay accurate.
+// Inline markdown renderer for the textarea overlay. The caret lives in the
+// transparent textarea, so the overlay must keep EVERY character (including the
+// **/_/~~/` syntax markers) in place — same character sequence == same caret
+// position. We just dim the markers and style the text between them. Width-
+// changing styles (font-family/size/padding) are avoided so the caret never
+// drifts; markers are kept visible but faint.
 function renderPreviewInline(text: string): React.ReactNode {
   if (!text) return null;
   const regex = /\*\*([\s\S]+?)\*\*|_([\s\S]+?)_|~~([\s\S]+?)~~|`([\s\S]+?)`/g;
   const parts: React.ReactNode[] = [];
   let last = 0; let k = 0;
   let m: RegExpExecArray | null;
+  const mark: React.CSSProperties = { opacity: 0.3 };
   while ((m = regex.exec(text)) !== null) {
     if (m.index > last) parts.push(<span key={k++}>{text.slice(last, m.index)}</span>);
     if (m[1] !== undefined) {
-      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
-        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
-        <span style={{ position: "absolute", left: 0, top: 0, fontWeight: "bold" }}>{m[1]}</span>
-      </span>);
+      parts.push(<span key={k++}><span style={mark}>**</span><span style={{ fontWeight: "bold" }}>{m[1]}</span><span style={mark}>**</span></span>);
     } else if (m[2] !== undefined) {
-      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
-        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
-        <span style={{ position: "absolute", left: 0, top: 0, fontStyle: "italic" }}>{m[2]}</span>
-      </span>);
+      parts.push(<span key={k++}><span style={mark}>_</span><span style={{ fontStyle: "italic" }}>{m[2]}</span><span style={mark}>_</span></span>);
     } else if (m[3] !== undefined) {
-      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
-        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
-        <span style={{ position: "absolute", left: 0, top: 0, textDecoration: "line-through", opacity: 0.55 }}>{m[3]}</span>
-      </span>);
+      parts.push(<span key={k++}><span style={mark}>~~</span><span style={{ textDecoration: "line-through", opacity: 0.6 }}>{m[3]}</span><span style={mark}>~~</span></span>);
     } else if (m[4] !== undefined) {
-      parts.push(<span key={k++} style={{ position: "relative", display: "inline" }}>
-        <span style={{ opacity: 0, whiteSpace: "pre" }}>{m[0]}</span>
-        <span style={{ position: "absolute", left: 0, top: 0, background: "rgba(0,0,0,0.07)", borderRadius: 3, padding: "0 3px", fontFamily: "monospace", fontSize: "0.88em" }}>{m[4]}</span>
-      </span>);
+      parts.push(<span key={k++}><span style={mark}>`</span><span style={{ background: "rgba(0,0,0,0.07)", borderRadius: 3 }}>{m[4]}</span><span style={mark}>`</span></span>);
     }
     last = regex.lastIndex;
   }
@@ -213,7 +206,7 @@ function renderInputPreview(text: string): React.ReactNode {
             </svg>
           </span>
         </span>
-        <span style={{ textDecoration: todo[2]==="x" ? "line-through" : "none", opacity: todo[2]==="x" ? 0.4 : 1 }}>{todo[3]}</span>
+        <span style={{ textDecoration: todo[2]==="x" ? "line-through" : "none", opacity: todo[2]==="x" ? 0.4 : 1 }}>{renderPreviewInline(todo[3])}</span>
       </div>
     );
     const numbered = rest.match(/^(\d+\. )(.*)$/);
@@ -221,7 +214,7 @@ function renderInputPreview(text: string): React.ReactNode {
       <div key={i} style={{ minHeight: "1.5em" }}>
         {indentSpan}
         <span style={{ opacity: 0.55, whiteSpace: "pre" }}>{numbered[1]}</span>
-        <span>{numbered[2]}</span>
+        <span>{renderPreviewInline(numbered[2])}</span>
       </div>
     );
     const bullet = rest.match(/^(- )(.*)$/);
@@ -232,10 +225,10 @@ function renderInputPreview(text: string): React.ReactNode {
           <span style={{ opacity: 0 }}>{bullet[1]}</span>
           <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, display: "flex", alignItems: "center", opacity: 0.5, fontSize: 11 }}>•</span>
         </span>
-        <span>{bullet[2]}</span>
+        <span>{renderPreviewInline(bullet[2])}</span>
       </div>
     );
-    return <div key={i} style={{ minHeight: "1.5em" }}>{line || <>&nbsp;</>}</div>;
+    return <div key={i} style={{ minHeight: "1.5em" }}>{renderPreviewInline(line) || <>&nbsp;</>}</div>;
   });
 }
 
@@ -378,7 +371,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
   }
 
   return (
-    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+    <div onMouseEnter={mobile ? undefined : () => setHover(true)} onMouseLeave={mobile ? undefined : () => setHover(false)}
       style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", flexDirection: "column", gap: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
         <div onClick={mobile ? () => setShowActions(v => !v) : undefined}
@@ -576,7 +569,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
       onDragEnd={handleDragEnd}
       style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: mobile ? "default" : "grab" }}>
 
-      <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      <div onMouseEnter={mobile ? undefined : () => setHover(true)} onMouseLeave={mobile ? undefined : () => setHover(false)}
         style={{ width: "100%", display: "flex", flexDirection: "column", gap: 0 }}>
 
         {/* ROW: left buttons + bubble — always hug the right edge */}
@@ -610,7 +603,8 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
           </div>
 
           {/* BUBBLE */}
-          <div onMouseEnter={() => scheduleActions(true)} onMouseLeave={() => scheduleActions(false)}
+          <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
+            onMouseLeave={mobile ? undefined : () => scheduleActions(false)}
             onClick={mobile ? () => setShowActions(v => !v) : undefined}
             style={{
               maxWidth: mobile ? "90%" : "75%",
@@ -634,7 +628,8 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
         </div>
 
         {/* BELOW ACTIONS: 답글, 수정, 삭제 — hover (desktop) or tap the bubble (mobile) */}
-        <div onMouseEnter={() => scheduleActions(true)} onMouseLeave={() => scheduleActions(false)}
+        <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
+          onMouseLeave={mobile ? undefined : () => scheduleActions(false)}
           style={{
             alignSelf: "flex-end", display: "flex", gap: mobile ? 4 : 1,
             height: showActions ? (mobile ? 30 : 20) : 0, overflow: "hidden",
