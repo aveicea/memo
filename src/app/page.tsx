@@ -780,8 +780,10 @@ export default function WidgetPage() {
         }, 0);
       } else {
         setMemos(reversed);
-        // Pin to bottom across several frames while images/fonts settle so the
-        // list doesn't visibly jump up after the first paint.
+        // Stay pinned to the bottom until the user actually scrolls. A
+        // ResizeObserver/image-load listener (see effect below) re-pins
+        // whenever content grows — no arbitrary time window, so late-loading
+        // images on slow mobile networks can't push the latest memo offscreen.
         initialScrollRef.current = true;
         [0, 80, 200, 400, 700].forEach(t =>
           setTimeout(() => {
@@ -789,7 +791,6 @@ export default function WidgetPage() {
               scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
           }, t)
         );
-        setTimeout(() => { initialScrollRef.current = false; }, 1000);
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
@@ -809,17 +810,29 @@ export default function WidgetPage() {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    // Only a genuine user gesture (wheel/touch) ends the bottom-pin — never a
+    // timer — so the view follows the bottom until the reader scrolls away.
     const cancelInitial = () => { initialScrollRef.current = false; };
+    const pinIfInitial = () => {
+      if (initialScrollRef.current) el.scrollTop = el.scrollHeight;
+    };
     const onScroll = () => {
       if (initialScrollRef.current) return;
       if (el.scrollTop < 120 && !loading && hasMore && nextCursor) {
         loadMemosRef.current(nextCursor);
       }
     };
+    // Re-pin whenever content grows (late images/fonts) while still in the
+    // initial period; capture phase catches non-bubbling image load events.
+    const ro = new ResizeObserver(pinIfInitial);
+    Array.from(el.children).forEach(c => ro.observe(c));
+    el.addEventListener("load", pinIfInitial, true);
     el.addEventListener("scroll", onScroll, { passive: true });
     el.addEventListener("wheel", cancelInitial, { passive: true });
     el.addEventListener("touchmove", cancelInitial, { passive: true });
     return () => {
+      ro.disconnect();
+      el.removeEventListener("load", pinIfInitial, true);
       el.removeEventListener("scroll", onScroll);
       el.removeEventListener("wheel", cancelInitial);
       el.removeEventListener("touchmove", cancelInitial);
