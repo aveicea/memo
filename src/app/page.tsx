@@ -191,20 +191,22 @@ function renderPreviewInline(text: string): React.ReactNode {
 }
 
 function renderInputPreview(text: string): React.ReactNode {
+  // The overlay must lay text out exactly like the textarea (pre-wrap inline
+  // flow) so the caret lines up with what's drawn. We keep every marker as
+  // invisible literal text that reserves the real character width, and overlay
+  // the pretty SVG/bullet absolutely on top — never with flex, which would
+  // wrap and drift the caret away from the marker.
   return text.split("\n").map((line, i) => {
     const leading = line.match(/^(\s*)/)?.[1] ?? "";
     const rest = line.slice(leading.length);
-    // Reserve the indent as the *actual* leading spaces (invisible) so the
-    // overlay is character-for-character identical to the textarea — using
-    // paddingLeft instead would drift the caret on indented lines.
-    const indentSpan = leading ? <span style={{ whiteSpace: "pre", flexShrink: 0 }}>{leading}</span> : null;
+    const indentSpan = leading ? <span style={{ whiteSpace: "pre" }}>{leading}</span> : null;
     const todo = rest.match(/^(- \[(x| )\] ?)(.*)$/);
     if (todo) return (
-      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
+      <div key={i} style={{ minHeight: "1.5em" }}>
         {indentSpan}
-        <span style={{ position: "relative", flexShrink: 0 }}>
-          <span style={{ opacity: 0, whiteSpace: "pre" }}>{todo[1]}</span>
-          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: todo[2]==="x" ? 0.35 : 0.6 }}>
+        <span style={{ position: "relative", whiteSpace: "pre" }}>
+          <span style={{ opacity: 0 }}>{todo[1]}</span>
+          <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, display: "flex", alignItems: "center", opacity: todo[2]==="x" ? 0.35 : 0.6 }}>
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
               {todo[2]==="x" && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
@@ -216,19 +218,19 @@ function renderInputPreview(text: string): React.ReactNode {
     );
     const numbered = rest.match(/^(\d+\. )(.*)$/);
     if (numbered) return (
-      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
+      <div key={i} style={{ minHeight: "1.5em" }}>
         {indentSpan}
-        <span style={{ opacity: 0.55, whiteSpace: "pre", flexShrink: 0 }}>{numbered[1]}</span>
+        <span style={{ opacity: 0.55, whiteSpace: "pre" }}>{numbered[1]}</span>
         <span>{numbered[2]}</span>
       </div>
     );
     const bullet = rest.match(/^(- )(.*)$/);
     if (bullet) return (
-      <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
+      <div key={i} style={{ minHeight: "1.5em" }}>
         {indentSpan}
-        <span style={{ position: "relative", flexShrink: 0 }}>
-          <span style={{ opacity: 0, whiteSpace: "pre" }}>{bullet[1]}</span>
-          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.5, fontSize: 11 }}>•</span>
+        <span style={{ position: "relative", whiteSpace: "pre" }}>
+          <span style={{ opacity: 0 }}>{bullet[1]}</span>
+          <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, display: "flex", alignItems: "center", opacity: 0.5, fontSize: 11 }}>•</span>
         </span>
         <span>{bullet[2]}</span>
       </div>
