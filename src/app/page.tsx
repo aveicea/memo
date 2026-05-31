@@ -211,7 +211,7 @@ function renderInputPreview(text: string): React.ReactNode {
             </svg>
           </span>
         </span>
-        <span style={{ textDecoration: todo[2]==="x" ? "line-through" : "none", opacity: todo[2]==="x" ? 0.4 : 1 }}>{renderPreviewInline(todo[3])}</span>
+        <span style={{ textDecoration: todo[2]==="x" ? "line-through" : "none", opacity: todo[2]==="x" ? 0.4 : 1 }}>{todo[3]}</span>
       </div>
     );
     const numbered = rest.match(/^(\d+\. )(.*)$/);
@@ -219,7 +219,7 @@ function renderInputPreview(text: string): React.ReactNode {
       <div key={i} style={{ display: "flex", gap: 0, alignItems: "flex-start", minHeight: "1.5em" }}>
         {indentSpan}
         <span style={{ opacity: 0.55, whiteSpace: "pre", flexShrink: 0 }}>{numbered[1]}</span>
-        <span>{renderPreviewInline(numbered[2])}</span>
+        <span>{numbered[2]}</span>
       </div>
     );
     const bullet = rest.match(/^(- )(.*)$/);
@@ -230,10 +230,10 @@ function renderInputPreview(text: string): React.ReactNode {
           <span style={{ opacity: 0, whiteSpace: "pre" }}>{bullet[1]}</span>
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.5, fontSize: 11 }}>•</span>
         </span>
-        <span>{renderPreviewInline(bullet[2])}</span>
+        <span>{bullet[2]}</span>
       </div>
     );
-    return <div key={i} style={{ minHeight: "1.5em" }}>{renderPreviewInline(line) || <>&nbsp;</>}</div>;
+    return <div key={i} style={{ minHeight: "1.5em" }}>{line || <>&nbsp;</>}</div>;
   });
 }
 
@@ -258,7 +258,7 @@ function MemoContent({ content, todos, onToggle }: {
           return (
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
               <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: line.checked ? 0.35 : 0.6, cursor: tid ? "pointer" : "default" }}
-                onClick={() => tid && onToggle(tid, !line.checked)}>
+                onClick={e => { e.stopPropagation(); tid && onToggle(tid, !line.checked); }}>
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
                   {line.checked && <polyline points="4.5 8.5 7 11 11.5 5.5" strokeWidth="1.8"/>}
@@ -582,7 +582,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
 
           {/* LEFT ACTIONS: visible on hover/showActions (desktop), tap to reveal (mobile) */}
           <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-            <div style={{ maxWidth: (hover || showActions || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || showActions) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
@@ -590,7 +590,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
                 onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
               ><PinIcon /></button>
             </div>
-            <div style={{ maxWidth: (hover || showActions || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || showActions) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
@@ -787,6 +787,7 @@ export default function WidgetPage() {
               scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
           }, t)
         );
+        setTimeout(() => { initialScrollRef.current = false; }, 1000);
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
@@ -801,25 +802,28 @@ export default function WidgetPage() {
     loadMemos();
   }, [cfgLoaded, cfg, loadMemos, router]);
 
-  // Auto-load older pages without a button
-  useEffect(() => {
-    if (loading || !hasMore || !nextCursor) return;
-    const timer = setTimeout(() => { loadMemosRef.current(nextCursor); }, 400);
-    return () => clearTimeout(timer);
-  }, [loading, hasMore, nextCursor]);
-
-  // If the user scrolls up during the initial settle window, stop force-pinning.
+  // Load older pages when the user scrolls near the top (instead of auto-loading
+  // immediately, which would push content down and snap the scroll position up).
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const cancel = () => { initialScrollRef.current = false; };
-    el.addEventListener("wheel", cancel, { passive: true });
-    el.addEventListener("touchmove", cancel, { passive: true });
-    return () => {
-      el.removeEventListener("wheel", cancel);
-      el.removeEventListener("touchmove", cancel);
+    const cancelInitial = () => { initialScrollRef.current = false; };
+    const onScroll = () => {
+      if (initialScrollRef.current) return;
+      if (el.scrollTop < 120 && !loading && hasMore && nextCursor) {
+        loadMemosRef.current(nextCursor);
+      }
     };
-  }, [cfgLoaded]);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("wheel", cancelInitial, { passive: true });
+    el.addEventListener("touchmove", cancelInitial, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", cancelInitial);
+      el.removeEventListener("touchmove", cancelInitial);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfgLoaded, loading, hasMore, nextCursor]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -832,10 +836,9 @@ export default function WidgetPage() {
   useEffect(() => {
     if (!mobile) return;
     const handler = () => {
-      const el = scrollRef.current;
-      if (!el) return;
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-      if (nearBottom) setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+      // Always scroll to bottom when keyboard opens — clientHeight shrinks so
+      // nearBottom checks are unreliable here.
+      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
     };
     window.visualViewport?.addEventListener("resize", handler);
     return () => window.visualViewport?.removeEventListener("resize", handler);
