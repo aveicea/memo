@@ -686,6 +686,7 @@ export default function WidgetPage() {
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
+  const initialScrollRef = useRef(false);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
 
@@ -777,9 +778,15 @@ export default function WidgetPage() {
         }, 0);
       } else {
         setMemos(reversed);
-        // Two-pass scroll: first attempt right after render, second after images/fonts settle
-        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
-        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 300);
+        // Pin to bottom across several frames while images/fonts settle so the
+        // list doesn't visibly jump up after the first paint.
+        initialScrollRef.current = true;
+        [0, 80, 200, 400, 700].forEach(t =>
+          setTimeout(() => {
+            if (initialScrollRef.current && scrollRef.current)
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }, t)
+        );
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
@@ -800,6 +807,19 @@ export default function WidgetPage() {
     const timer = setTimeout(() => { loadMemosRef.current(nextCursor); }, 400);
     return () => clearTimeout(timer);
   }, [loading, hasMore, nextCursor]);
+
+  // If the user scrolls up during the initial settle window, stop force-pinning.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const cancel = () => { initialScrollRef.current = false; };
+    el.addEventListener("wheel", cancel, { passive: true });
+    el.addEventListener("touchmove", cancel, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", cancel);
+      el.removeEventListener("touchmove", cancel);
+    };
+  }, [cfgLoaded]);
 
   useEffect(() => {
     const el = textareaRef.current;
