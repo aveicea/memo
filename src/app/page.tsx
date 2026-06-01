@@ -232,15 +232,15 @@ function renderInputPreview(text: string): React.ReactNode {
   });
 }
 
-function MemoContent({ content, todos, onToggle }: {
+const MEMO_MAX_LINES = 6;
+
+function MemoContent({ content, todos, onToggle, expanded }: {
   content: string; todos: Todo[];
   onToggle: (id: string, checked: boolean) => void;
+  expanded: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const lines = parseLines(content);
-  const MAX = 6;
-  const shown = expanded ? lines : lines.slice(0, MAX);
-  const hiddenCount = lines.length - shown.length;
+  const shown = expanded ? lines : lines.slice(0, MEMO_MAX_LINES);
 
   // Map each to_do line (by position in full lines array) to its Notion block
   // ID. Notion returns to_do blocks in document order, and parseLines preserves
@@ -286,12 +286,6 @@ function MemoContent({ content, todos, onToggle }: {
         }
         return <div key={i} style={{ paddingLeft: line.indent * 14 }}>{renderInlineMarkdown(line.text) || <>&nbsp;</>}</div>;
       })}
-      {!expanded && hiddenCount > 0 && (
-        <button onClick={e => { e.stopPropagation(); setExpanded(true); }}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 0 0", fontSize: 10, color: "inherit", opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s", textAlign: "left" }}>
-          ...더보기 (+{hiddenCount})
-        </button>
-      )}
     </div>
   );
 }
@@ -454,6 +448,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
 }) {
   const [hover, setHover]       = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing]   = useState(false);
   const [editText, setEditText] = useState(memo.content);
   const [copied, setCopied]     = useState(false);
@@ -620,7 +615,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
               boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
               transition: "background 0.2s, color 0.2s",
             }}>
-            <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} />
+            <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} expanded={expanded} />
             {memo.imageUrls.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 4, marginTop: memo.content.trim() ? 8 : 0 }}>
                 {memo.imageUrls.map((url, idx) => (
@@ -631,6 +626,21 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
             )}
           </div>
         </div>
+
+        {/* 더보기/접기 — outside the bubble so tapping it never fires the bubble's
+            onClick; right-aligned to match bubble position */}
+        {(() => {
+          const lineCount = parseLines(memo.content).length;
+          if (lineCount <= MEMO_MAX_LINES) return null;
+          return (
+            <button onClick={() => setExpanded(v => !v)}
+              style={{ alignSelf: "flex-end", background: "none", border: "none", cursor: "pointer",
+                padding: mobile ? "4px 6px" : "2px 4px", fontSize: 10, color: textColor,
+                opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s" }}>
+              {expanded ? "접기 ↑" : `...더보기 (+${lineCount - MEMO_MAX_LINES})`}
+            </button>
+          );
+        })()}
 
         {/* BELOW ACTIONS: 답글, 수정, 삭제 — hover (desktop) or tap the bubble (mobile) */}
         <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
