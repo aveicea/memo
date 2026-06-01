@@ -242,14 +242,19 @@ function MemoContent({ content, todos, onToggle }: {
   const shown = expanded ? lines : lines.slice(0, MAX);
   const hiddenCount = lines.length - shown.length;
 
-  const findTodo = (text: string, checked: boolean) =>
-    todos.find(t => t.text === text && t.checked === checked)?.id ?? null;
+  // Map each to_do line (by position in full lines array) to its Notion block
+  // ID. Notion returns to_do blocks in document order, and parseLines preserves
+  // that order, so the nth to_do line maps to todos[n]. This avoids false
+  // misses when multiple todos share the same text or checked state.
+  const todoIdByLine = new Map<number, string>();
+  let tc = 0;
+  lines.forEach((l, i) => { if (l.type === "todo" && tc < todos.length) todoIdByLine.set(i, todos[tc++].id); });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {shown.map((line, i) => {
         if (line.type === "todo") {
-          const tid = findTodo(line.text, line.checked);
+          const tid = todoIdByLine.get(i) ?? null;
           return (
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 5, paddingLeft: line.indent * 14 }}>
               <span style={{ flexShrink: 0, height: "1.4em", display: "flex", alignItems: "center", opacity: line.checked ? 0.35 : 0.6, cursor: tid ? "pointer" : "default" }}
@@ -282,7 +287,7 @@ function MemoContent({ content, todos, onToggle }: {
         return <div key={i} style={{ paddingLeft: line.indent * 14 }}>{renderInlineMarkdown(line.text) || <>&nbsp;</>}</div>;
       })}
       {!expanded && hiddenCount > 0 && (
-        <button onClick={() => setExpanded(true)}
+        <button onClick={e => { e.stopPropagation(); setExpanded(true); }}
           style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 0 0", fontSize: 10, color: "inherit", opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s", textAlign: "left" }}>
           ...더보기 (+{hiddenCount})
         </button>
