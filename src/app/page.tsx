@@ -627,14 +627,13 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
           </div>
         </div>
 
-        {/* 더보기/접기 — outside the bubble so tapping it never fires the bubble's
-            onClick; right-aligned to match bubble position */}
+        {/* 더보기/접기 — outside the bubble, left-aligned */}
         {(() => {
           const lineCount = parseLines(memo.content).length;
           if (lineCount <= MEMO_MAX_LINES) return null;
           return (
             <button onClick={() => setExpanded(v => !v)}
-              style={{ alignSelf: "flex-end", background: "none", border: "none", cursor: "pointer",
+              style={{ alignSelf: "flex-start", background: "none", border: "none", cursor: "pointer",
                 padding: mobile ? "4px 6px" : "2px 4px", fontSize: 10, color: textColor,
                 opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s" }}>
               {expanded ? "접기 ↑" : `...더보기 (+${lineCount - MEMO_MAX_LINES})`}
