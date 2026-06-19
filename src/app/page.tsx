@@ -835,17 +835,19 @@ export default function WidgetPage() {
         // when older memos are inserted above it. The actual scroll correction
         // happens synchronously in a layout effect (before paint), with extra
         // passes scheduled below to absorb late image/font height changes.
+        // Skip anchoring while still bottom-pinned (auto-fill below) — there we
+        // want the view to stay at the bottom on the most recent memo.
         const scrollEl = scrollRef.current;
-        const anchorEl = scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null;
+        const anchorEl = initialScrollRef.current ? null : (scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null);
         if (scrollEl && anchorEl) {
           anchorRef.current = {
             id: anchorEl.getAttribute("data-guestbook-entry-id")!,
             offset: anchorEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top,
           };
+          [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
+          setTimeout(() => { anchorRef.current = null; }, 800);
         }
         setMemos(prev => [...reversed, ...prev]);
-        [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
-        setTimeout(() => { anchorRef.current = null; }, 800);
       } else {
         setMemos(reversed);
         // Stay pinned to the bottom until the user actually scrolls. A
@@ -902,6 +904,19 @@ export default function WidgetPage() {
     loadMemos();
     loadArchived();
   }, [cfgLoaded, cfg, loadMemos, loadArchived, router]);
+
+  // Keep pulling older pages until the visible list actually fills the scroll
+  // viewport. A page of 20 can collapse to just a few rows once archived memos
+  // (and other filtered-out items) are hidden — without this the list would be
+  // too short to scroll, so the scroll-to-top lazy loader could never fire and
+  // it would look like "only a little" loaded.
+  useEffect(() => {
+    if (!cfgLoaded || loading || !hasMore || !nextCursor) return;
+    const el = scrollRef.current;
+    if (el && el.scrollHeight <= el.clientHeight + 4) {
+      loadMemosRef.current(nextCursor);
+    }
+  }, [memos, loading, hasMore, nextCursor, cfgLoaded, activeFolder]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
@@ -1478,8 +1493,8 @@ export default function WidgetPage() {
                 const isArchive = item.type === "archive";
                 const isDroppable = item.type === "folder" || isArchive;
                 const label = item.type === "pinned" ? "고정" : item.type === "important" ? "중요" : isArchive ? "보관" : item.label!;
-                const color = item.type === "pinned" || item.type === "important" ? "var(--accent)"
-                  : isArchive ? "#a8a8b3" : item.color!;
+                const color = item.type === "pinned" || item.type === "important" || isArchive ? "var(--accent)"
+                  : item.color!;
                 const isActive = activeFolder === label;
                 const isDragOver = isDroppable && dragOverFolder === label;
                 return (
