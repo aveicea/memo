@@ -12,7 +12,7 @@ interface Design {
   msgBubbleBg: string; msgTextColor: string;
   replyBubbleBg: string; replyTextColor: string;
   folderColorPalette: string[]; folderBubblePalette: string[]; fontFamily: string; alignLeft: boolean;
-  mobile?: boolean;
+  mobile?: boolean; widget?: boolean;
 }
 interface Config extends Design {
   token: string; databaseId: string; title: string; folderOptions: string[];
@@ -345,7 +345,7 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
   function applyPreset(p: typeof PRESETS[0]) {
     // Preserve the mobile toggle across theme switches — it's a layout target,
     // not part of the color theme.
-    setD(prev => ({ ...p, folderColorPalette: [...p.folderColorPalette], mobile: prev.mobile }));
+    setD(prev => ({ ...p, folderColorPalette: [...p.folderColorPalette], mobile: prev.mobile, widget: prev.widget }));
     setFontIdx(FONTS.findIndex(f => f.css === p.fontFamily) ?? 0);
   }
 
@@ -446,6 +446,13 @@ function Step2({ folderOptions, initial, onNext, onBack }: { folderOptions: stri
               <div onClick={() => setField("mobile", !d.mobile)}
                 style={{ width:38, height:20, borderRadius:10, background:d.mobile?"#E8A8C0":"#e0e0e0", cursor:"pointer", position:"relative", transition:"background 0.2s" }}>
                 <div style={{ position:"absolute", top:2, left:d.mobile?"20px":"2px", width:16, height:16, borderRadius:"50%", background:"#fff", transition:"left 0.2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
+              </div>
+            </div>
+            <div style={{ padding:"0 16px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:12, color:"#888" }}>위젯 테두리</span>
+              <div onClick={() => setField("widget", !d.widget)}
+                style={{ width:38, height:20, borderRadius:10, background:d.widget?"#E8A8C0":"#e0e0e0", cursor:"pointer", position:"relative", transition:"background 0.2s" }}>
+                <div style={{ position:"absolute", top:2, left:d.widget?"20px":"2px", width:16, height:16, borderRadius:"50%", background:"#fff", transition:"left 0.2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
               </div>
             </div>
           </SectionCard>
