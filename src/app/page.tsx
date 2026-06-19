@@ -906,18 +906,17 @@ export default function WidgetPage() {
     loadArchived();
   }, [cfgLoaded, cfg, loadMemos, loadArchived, router]);
 
-  // Keep pulling older pages until the visible list actually fills the scroll
-  // viewport. A page of 20 can collapse to just a few rows once archived memos
-  // (and other filtered-out items) are hidden — without this the list would be
-  // too short to scroll, so the scroll-to-top lazy loader could never fire and
-  // it would look like "only a little" loaded.
+  // After the first page renders, keep chaining the next page in the background
+  // until everything is loaded — so the full history ends up available without
+  // the user having to scroll up. Each load waits for the previous one (gated by
+  // `loading`); the effect re-fires when `nextCursor` advances. A small delay
+  // keeps it gentle on the Notion API. The view stays bottom-pinned (or, once the
+  // reader scrolls, anchored) so this never yanks the scroll position around.
   useEffect(() => {
     if (!cfgLoaded || loading || !hasMore || !nextCursor) return;
-    const el = scrollRef.current;
-    if (el && el.scrollHeight <= el.clientHeight + 4) {
-      loadMemosRef.current(nextCursor);
-    }
-  }, [memos, loading, hasMore, nextCursor, cfgLoaded, activeFolder]);
+    const t = setTimeout(() => loadMemosRef.current(nextCursor), 250);
+    return () => clearTimeout(t);
+  }, [memos, loading, hasMore, nextCursor, cfgLoaded]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
