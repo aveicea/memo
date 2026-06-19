@@ -22,7 +22,7 @@ interface Config {
   alignLeft?: boolean;
   folderProp?: string; pinnedProp?: string;
   importantProp?: string; archivedProp?: string; replyProp?: string; dateProp?: string;
-  mobile?: boolean;
+  mobile?: boolean; widget?: boolean;
 }
 
 function hex2hsl(hex: string): [number, number, number] {
@@ -825,6 +825,9 @@ export default function WidgetPage() {
   const fontFamily = cfg?.fontFamily ?? "'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif";
   const cssVars    = cfg ? buildCssVars(cfg) : buildCssVars({ accent } as Config);
   const mobile     = !!cfg?.mobile;
+  // Widget mode: a bordered, rounded, centered card frame (Notion-embed style),
+  // mutually exclusive with mobile. Just changes the outer frame.
+  const widget     = !!cfg?.widget && !mobile;
 
   // Mobile formatting toolbar actions — wrap the current selection (bold/italic/
   // strikethrough) or insert a list marker at the line start. Mirrors the desktop
@@ -1449,7 +1452,7 @@ export default function WidgetPage() {
   return (
     <div style={{
       width:"100%", height:"100dvh", boxSizing:"border-box", overflow:"hidden",
-      padding: mobile ? 0 : 16, display:"flex", alignItems:"center", justifyContent:"center",
+      padding: mobile ? 0 : (widget ? "15px 20px 20px" : 16), display:"flex", alignItems:"center", justifyContent:"center",
       fontFamily: fontFamily, background:"#ffffff",
     }}>
       <style>{cssVars}</style>
@@ -1457,9 +1460,12 @@ export default function WidgetPage() {
       {mobile && <DynamicThemeColor color={accent} />}
 
       <div className={mobile ? "y2k-widget mobile-memo" : "y2k-widget"} style={{
-        width:"100%", maxWidth:"100%", height: minimized ? "auto" : "100%",
+        width:"100%", maxWidth: widget ? 437 : "100%", height: minimized ? "auto" : "100%",
         alignSelf: minimized ? "flex-start" : "stretch",
-        background:"var(--bg-color)", borderRadius:0, border:"none", outline:"none",
+        background:"var(--bg-color)",
+        borderRadius: widget ? 6 : 0,
+        border: widget ? "1px solid var(--accent)" : "none",
+        outline: widget ? "2px solid var(--accent-light)" : "none",
         display:"flex", flexDirection:"column", overflow:"hidden",
         boxSizing:"border-box", fontFamily:"var(--widget-font-family, inherit)",
       }}>
