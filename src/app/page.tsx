@@ -332,9 +332,9 @@ function PendingBubble() {
   );
 }
 
-function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: {
+function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile, compact }: {
   text: string; first: boolean; index: number;
-  onReply: () => void; onEdit: (t: string) => void; onDelete: () => void; mobile?: boolean;
+  onReply: () => void; onEdit: (t: string) => void; onDelete: () => void; mobile?: boolean; compact?: boolean;
 }) {
   const [hover, setHover] = useState(false);
   const [showActions, setShowActions] = useState(false);
@@ -465,18 +465,19 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
               display: "flex", alignItems: "center", gap: 3, transition: "color 0.15s" }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
             onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}
-          >{a.icon}{!mobile && a.label}</button>
+          >{a.icon}{!compact && a.label}</button>
         ))}
       </div>
     </div>
   );
 }
 
-function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImportant, onArchive, onDelete, onToggle, onEdit, onReply, onEditReply, onDeleteReply }: {
+function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, compact, onPin, onImportant, onArchive, onDelete, onToggle, onEdit, onReply, onEditReply, onDeleteReply }: {
   memo: Memo;
   folderColor?: string;
   folderBubbleColor?: string;
   mobile?: boolean;
+  compact?: boolean;
   onPin: () => void; onImportant: () => void; onArchive: () => void; onDelete: () => void;
   onToggle: (id: string, checked: boolean) => void;
   onEdit: (content: string) => void;
@@ -706,14 +707,14 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
                 transition: "color 0.15s" }}
               onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
               onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}
-            >{a.icon}{!mobile && a.label}</button>
+            >{a.icon}{!compact && a.label}</button>
           ))}
         </div>
       </div>
 
       {/* reply bubbles */}
       {memo.replies.map((r, i) => (
-        <ReplyBubble key={i} text={r} first={i === 0} index={i} onReply={onReply} mobile={mobile}
+        <ReplyBubble key={i} text={r} first={i === 0} index={i} onReply={onReply} mobile={mobile} compact={compact}
           onEdit={(t) => onEditReply(i, t)}
           onDelete={() => onDeleteReply(i)} />
       ))}
@@ -744,12 +745,19 @@ export default function WidgetPage() {
   // Visible viewport height (mobile): tracks the on-screen area so the widget
   // shrinks to fit above the keyboard instead of leaving a white gap on top.
   const [viewportH, setViewportH] = useState<number | null>(null);
+  // When the memo list gets too narrow (small window / sidebar open), drop the
+  // action-button text labels and show icon-only so they don't wrap to 2 lines.
+  const [compactActions, setCompactActions] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
   // When older memos are prepended at the top, we keep the memo the reader was
   // looking at stationary by anchoring on its DOM element (id + viewport offset).
   const anchorRef = useRef<{ id: string; offset: number } | null>(null);
+  // Topmost visible memo, tracked on scroll, so toggling the sidebar (which
+  // reflows the list width) can keep that memo in view instead of jumping up.
+  const topAnchorRef = useRef<{ id: string; offset: number } | null>(null);
+  const prevSidebarRef = useRef(true);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
 
@@ -1028,6 +1036,50 @@ export default function WidgetPage() {
     el.style.height = "32px";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   }, [inputText]);
+
+  // Track the memo list's width → compact (icon-only) action buttons when narrow.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setCompactActions(el.clientWidth < 300));
+    ro.observe(el);
+    setCompactActions(el.clientWidth < 300);
+    return () => ro.disconnect();
+  }, [cfgLoaded]);
+
+  // Remember which memo sits at the top of the viewport as the reader scrolls.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const record = () => {
+      const cTop = el.getBoundingClientRect().top;
+      const items = el.querySelectorAll<HTMLElement>("[data-guestbook-entry-id]");
+      for (const it of items) {
+        const r = it.getBoundingClientRect();
+        if (r.bottom > cTop + 1) {
+          topAnchorRef.current = { id: it.getAttribute("data-guestbook-entry-id")!, offset: r.top - cTop };
+          return;
+        }
+      }
+    };
+    el.addEventListener("scroll", record, { passive: true });
+    record();
+    return () => el.removeEventListener("scroll", record);
+  }, [cfgLoaded]);
+
+  // When the sidebar opens/closes the list reflows; keep the memo the reader was
+  // looking at pinned in place (before paint) instead of letting it jump.
+  useLayoutEffect(() => {
+    if (prevSidebarRef.current === showSidebar) return;
+    prevSidebarRef.current = showSidebar;
+    const a = topAnchorRef.current;
+    const el = scrollRef.current;
+    if (!a || !el) return;
+    const target = el.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
+    if (!target) return;
+    const newOffset = target.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    el.scrollTop += newOffset - a.offset;
+  }, [showSidebar]);
 
   // On mobile, fit the widget to the visible viewport (above the keyboard) and
   // keep scroll pinned to the bottom when the keyboard opens/closes.
@@ -1453,7 +1505,7 @@ export default function WidgetPage() {
       <MemoBubble key={memo.id} memo={memo}
         folderColor={folderColor(memo.folder)}
         folderBubbleColor={folderBubbleColor(memo.folder)}
-        mobile={mobile}
+        mobile={mobile} compact={compactActions}
         onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
         onImportant={() => updateMemo(memo.id, { important: !memo.important })}
         onArchive={() => toggleArchive(memo)}
@@ -1749,37 +1801,33 @@ export default function WidgetPage() {
                 }} />
             </label>
 
-            {/* Textarea. Desktop overlays a styled markdown preview on a
-                transparent textarea; mobile uses a plain visible textarea so the
-                caret sits naturally after the text and there's no preview shimmer. */}
+            {/* Textarea with markdown preview overlay (caret lives in the
+                transparent textarea; the overlay draws the styled text on top). */}
             <div style={{ flex: 1, position: "relative" }}>
-              {/* Rendered markdown preview (desktop only; pointer-events none) */}
-              {!mobile && (
-                <div aria-hidden style={{
-                  position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
-                  padding: "7px 10px", fontSize: 13, fontFamily: "inherit", lineHeight: 1.5,
-                  color: "var(--text-color)", pointerEvents: "none",
-                  whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "hidden",
-                }}>
-                  {inputText
-                    ? renderInputPreview(inputText)
-                    : <span style={{ color: "#bbb", fontStyle: "normal" }}>{replyingMemo ? "답글 입력..." : "memo"}</span>
-                  }
-                </div>
-              )}
+              <div aria-hidden style={{
+                position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+                padding: mobile ? "9px 12px" : "7px 10px", fontSize: mobile ? 16 : 13, fontFamily: "inherit", lineHeight: 1.5,
+                color: "var(--text-color)", pointerEvents: "none",
+                whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "hidden",
+              }}>
+                {inputText
+                  ? renderInputPreview(inputText)
+                  : <span style={{ color: "#bbb", fontStyle: "normal" }}>{replyingMemo ? "답글 입력..." : "memo"}</span>
+                }
+              </div>
               <textarea ref={textareaRef} value={inputText}
                 onChange={e => setInputText(applyMarkdownShortcuts(e.target.value))}
                 onKeyDown={handleTextareaKeyDown}
                 onPaste={handlePaste}
-                placeholder={mobile ? (replyingMemo ? "답글 입력..." : "memo") : ""} autoComplete="off" rows={1}
+                placeholder="" autoComplete="off" rows={1}
                 className="y2k-input"
                 style={{
-                  display: "block", width: "100%", padding: mobile ? "8px 12px" : "7px 10px",
+                  display: "block", width: "100%", padding: mobile ? "9px 12px" : "7px 10px",
                   border: "1px solid var(--border-color, #e8e8e8)",
-                  borderRadius: 4, fontSize: mobile ? 14 : 13, fontFamily: "inherit",
-                  color: mobile ? "var(--text-color)" : "transparent", caretColor: "var(--text-color)",
+                  borderRadius: 4, fontSize: mobile ? 16 : 13, fontFamily: "inherit",
+                  color: "transparent", caretColor: "var(--text-color)",
                   outline: "none", background: "var(--bg-color)", transition: "border 0.2s ease",
-                  resize: "none", overflow: "hidden", lineHeight: 1.5, minHeight: mobile ? 36 : 32, maxHeight: 120,
+                  resize: "none", overflow: "hidden", lineHeight: 1.5, minHeight: mobile ? 40 : 32, maxHeight: 120,
                   boxSizing: "border-box",
                 }}
               />

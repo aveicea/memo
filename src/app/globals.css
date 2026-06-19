@@ -4,12 +4,25 @@
 
 html { -webkit-text-size-adjust: 100%; }
 
+/* Lock the page itself so only the memo list scrolls — otherwise on mobile the
+   whole widget (header + input) scrolls with the body / rubber-bands. */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background: #ffffff;
   color: #333;
   font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
+  position: fixed;
+  inset: 0;
 }
+
+/* Keep overscroll inside the memo list instead of chaining to the page. */
+.y2k-scroll { overscroll-behavior: contain; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
