@@ -1307,8 +1307,15 @@ export default function WidgetPage() {
       const val = ta.value;
       const lineStart = val.lastIndexOf("\n", start - 1) + 1;
       const curLine = val.slice(lineStart, start);
+      // Numbered lists continue with the next number; checkbox/bullet keep their marker.
+      const numbered = curLine.match(/^(\s*)(\d+)\. /);
       const m = curLine.match(/^(\s*)(- \[[ x]\] |- )/);
-      if (m) {
+      if (numbered) {
+        const insert = "\n" + numbered[1] + (parseInt(numbered[2], 10) + 1) + ". ";
+        e.preventDefault();
+        cursorPosRef.current = start + insert.length;
+        setInputText(val.slice(0, start) + insert + val.slice(start));
+      } else if (m) {
         const marker = m[2].startsWith("- [") ? "- [ ] " : "- ";
         const insert = "\n" + m[1] + marker;
         e.preventDefault();
