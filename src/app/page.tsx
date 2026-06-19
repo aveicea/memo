@@ -1599,7 +1599,7 @@ export default function WidgetPage() {
 
           {/* Memo list */}
           <div ref={scrollRef} className="y2k-scroll"
-            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"8px 14px 8px 8px" }}>
+            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px" }}>
 
             {loading && memos.length === 0 && (
               <div style={{ padding:40, textAlign:"center", color:"var(--accent)", fontSize:13 }}>
