@@ -458,11 +458,12 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
   const editCursorRef = useRef<number | null>(null);
   const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 답글/수정/삭제 row: only appears when hovering the bubble's right side, and
-  // with a small delay so it isn't twitchy when the cursor just passes over.
+  // 답글/보관/수정/삭제 row: only appears after the cursor lingers on the bubble
+  // for a beat, so a passing cursor doesn't flash the buttons. Longer reveal
+  // delay than the side icons, which show instantly on hover.
   function scheduleActions(show: boolean) {
     if (actionTimer.current) clearTimeout(actionTimer.current);
-    actionTimer.current = setTimeout(() => setShowActions(show), show ? 320 : 140);
+    actionTimer.current = setTimeout(() => setShowActions(show), show ? 800 : 140);
   }
 
   const isImportant = memo.important;
