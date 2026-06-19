@@ -11,7 +11,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   try {
     const body = await req.json();
-    const { token, pinnedProp, importantProp, folderProp, replyProp, pinned, important, folder, reply, content } = body;
+    const { token, pinnedProp, importantProp, archivedProp, folderProp, replyProp, pinned, important, archived, folder, reply, content } = body;
 
     if (content !== undefined) {
       const bRes = await fetch(`https://api.notion.com/v1/blocks/${id}/children`, { headers: hdrs(token) });
@@ -54,6 +54,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const properties: Record<string, unknown> = {};
     if (pinnedProp    && pinned     !== undefined) properties[pinnedProp]    = { checkbox: pinned };
     if (importantProp && important  !== undefined) properties[importantProp] = { checkbox: important };
+    if (archivedProp  && archived   !== undefined) properties[archivedProp]  = { checkbox: archived };
     if (folderProp    && folder     !== undefined) properties[folderProp]    = { select: folder ? { name: folder } : null };
     if (replyProp     && reply      !== undefined) properties[replyProp]     = { rich_text: reply ? [{ type: "text", text: { content: reply } }] : [] };
 

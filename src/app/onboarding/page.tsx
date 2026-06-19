@@ -16,7 +16,7 @@ interface Design {
 }
 interface Config extends Design {
   token: string; databaseId: string; title: string; folderOptions: string[];
-  folderProp?: string; pinnedProp?: string; importantProp?: string; replyProp?: string; dateProp?: string;
+  folderProp?: string; pinnedProp?: string; importantProp?: string; archivedProp?: string; replyProp?: string; dateProp?: string;
 }
 
 /* ── theme presets ── */
@@ -208,7 +208,7 @@ function Steps({ current }: { current: number }) {
 
 /* ── step 1 ── */
 function Step1({ onNext, onImport }: {
-  onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[]; folderProp?:string; pinnedProp?:string; importantProp?:string; replyProp?:string; dateProp?:string }) => void;
+  onNext: (d: { token:string; databaseId:string; title:string; folderOptions:string[]; folderProp?:string; pinnedProp?:string; importantProp?:string; archivedProp?:string; replyProp?:string; dateProp?:string }) => void;
   onImport: (c: Config) => void;
 }) {
   const [token, setToken]   = useState("");
@@ -249,7 +249,7 @@ function Step1({ onNext, onImport }: {
     const db = dbs.find(d => d.id === selected);
     if (!db) return;
     let folderOptions: string[] = [];
-    let folderProp: string | undefined, pinnedProp: string | undefined, importantProp: string | undefined, replyProp: string | undefined, dateProp: string | undefined;
+    let folderProp: string | undefined, pinnedProp: string | undefined, importantProp: string | undefined, archivedProp: string | undefined, replyProp: string | undefined, dateProp: string | undefined;
     try {
       const r = await fetch("/api/notion/schema", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ token:token.trim(), databaseId:selected }) });
       const d = await r.json();
@@ -257,10 +257,11 @@ function Step1({ onNext, onImport }: {
       folderProp      = d.folderPropName ?? undefined;
       pinnedProp      = d.pinnedPropName ?? undefined;
       importantProp   = d.importantPropName ?? undefined;
+      archivedProp    = d.archivedPropName ?? undefined;
       replyProp       = d.replyPropName ?? undefined;
       dateProp        = d.datePropName ?? undefined;
     } catch { /* ok */ }
-    onNext({ token:token.trim(), databaseId:selected, title:db.title, folderOptions, folderProp, pinnedProp, importantProp, replyProp, dateProp });
+    onNext({ token:token.trim(), databaseId:selected, title:db.title, folderOptions, folderProp, pinnedProp, importantProp, archivedProp, replyProp, dateProp });
   }
 
   return (

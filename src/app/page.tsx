@@ -8,7 +8,7 @@ interface Todo { id: string; checked: boolean; text: string }
 interface Memo {
   id: string; content: string; todos: Todo[];
   createdAt: string; replies: string[];
-  pinned: boolean; important: boolean; folder: string;
+  pinned: boolean; important: boolean; archived: boolean; folder: string;
   imageUrls: string[];
   pending?: boolean;
 }
@@ -21,7 +21,7 @@ interface Config {
   replyBubbleBg?: string; replyTextColor?: string;
   alignLeft?: boolean;
   folderProp?: string; pinnedProp?: string;
-  importantProp?: string; replyProp?: string; dateProp?: string;
+  importantProp?: string; archivedProp?: string; replyProp?: string; dateProp?: string;
   mobile?: boolean;
 }
 
@@ -233,6 +233,8 @@ function renderInputPreview(text: string): React.ReactNode {
 }
 
 const MEMO_MAX_LINES = 6;
+// Label for the synthetic "archived" group shown last in the 전체 tab.
+const ARCHIVE_GROUP = "보관";
 
 function MemoContent({ content, todos, onToggle, expanded }: {
   content: string; todos: Todo[];
@@ -434,12 +436,12 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
   );
 }
 
-function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImportant, onDelete, onToggle, onEdit, onReply, onEditReply, onDeleteReply }: {
+function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImportant, onArchive, onDelete, onToggle, onEdit, onReply, onEditReply, onDeleteReply }: {
   memo: Memo;
   folderColor?: string;
   folderBubbleColor?: string;
   mobile?: boolean;
-  onPin: () => void; onImportant: () => void; onDelete: () => void;
+  onPin: () => void; onImportant: () => void; onArchive: () => void; onDelete: () => void;
   onToggle: (id: string, checked: boolean) => void;
   onEdit: (content: string) => void;
   onReply: () => void;
@@ -464,10 +466,16 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
   }
 
   const isImportant = memo.important;
-  const bubbleBg = isImportant
+  // Archived memos (only seen in the 전체 tab's 보관 group) get a distinct muted
+  // bubble so they read clearly as a different property from folders/important.
+  const bubbleBg = memo.archived
+    ? "#ececf1"
+    : isImportant
     ? "var(--reply-bubble-color)"
     : folderBubbleColor || (folderColor ? folderToBubbleColor(folderColor) : "var(--msg-bubble-color)");
-  const textColor = isImportant ? "var(--reply-text-color)" : "var(--msg-text-color)";
+  const textColor = memo.archived
+    ? "#9a9aa6"
+    : isImportant ? "var(--reply-text-color)" : "var(--msg-text-color)";
 
   useLayoutEffect(() => {
     if (editCursorRef.current !== null && editRef.current) {
@@ -652,6 +660,8 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
           }}>
           {[
             { label: "답글", onClick: onReply, icon: <ReplyIcon /> },
+            { label: memo.archived ? "복원" : "보관", onClick: onArchive,
+              icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg> },
             { label: "수정", onClick: startEdit,
               icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
             { label: "삭제", onClick: onDelete,
@@ -791,6 +801,7 @@ export default function WidgetPage() {
         ...(cfg.folderProp    ? { folderProp:    cfg.folderProp }    : {}),
         ...(cfg.pinnedProp    ? { pinnedProp:    cfg.pinnedProp }    : {}),
         ...(cfg.importantProp ? { importantProp: cfg.importantProp } : {}),
+        ...(cfg.archivedProp  ? { archivedProp:  cfg.archivedProp }  : {}),
         ...(cfg.replyProp     ? { replyProp:     cfg.replyProp }     : {}),
         ...(cursor            ? { cursor }                           : {}),
       });
@@ -832,10 +843,15 @@ export default function WidgetPage() {
     } finally { setLoading(false); }
   }, [cfg, restoreAnchor]);
 
-  // Before the browser paints the prepended memos, shift scrollTop so the
-  // anchored memo keeps its on-screen position — no visible jump.
+  // Runs before the browser paints whenever the memo list changes:
+  //  • prepended older memos → keep the anchored memo in place (no jump up)
+  //  • initial load / new memo while still bottom-pinned → snap to the bottom
+  //    so the default view is the most recent memo, not the top.
   useLayoutEffect(() => {
     if (anchorRef.current) restoreAnchor();
+    else if (initialScrollRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [memos, restoreAnchor]);
 
   useEffect(() => { loadMemosRef.current = loadMemos; }, [loadMemos]);
@@ -963,7 +979,7 @@ export default function WidgetPage() {
     // Optimistic pending bubble
     const tempMemo: Memo = {
       id: tempId, content: text, todos: [], createdAt, replies: [],
-      pinned: false, important: false, folder: targetFolder,
+      pinned: false, important: false, archived: false, folder: targetFolder,
       imageUrls: images.map(i => i.preview),
       pending: true,
     };
@@ -978,6 +994,7 @@ export default function WidgetPage() {
           token: cfg.token, databaseId: cfg.databaseId, content: text,
           folder: targetFolder, folderProp: cfg.folderProp,
           pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp,
+          archivedProp: cfg.archivedProp,
           dateProp: cfg.dateProp,
           imageUploadIds,
         }),
@@ -1007,7 +1024,7 @@ export default function WidgetPage() {
     setMemos(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m));
     await fetch(`/api/notion/memos/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: cfg.token, pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp, folderProp: cfg.folderProp, replyProp: cfg.replyProp, ...patch }),
+      body: JSON.stringify({ token: cfg.token, pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp, archivedProp: cfg.archivedProp, folderProp: cfg.folderProp, replyProp: cfg.replyProp, ...patch }),
     });
   }
 
@@ -1215,10 +1232,13 @@ export default function WidgetPage() {
 
   const effectiveFolder = (m: Memo) => m.folder || defaultFolder;
 
-  const filteredMemos = activeFolder === "ALL" || activeFolder === "전체" ? memos
-    : activeFolder === "고정" ? memos.filter(m => m.pinned)
-    : activeFolder === "중요" ? memos.filter(m => m.important)
-    : memos.filter(m => effectiveFolder(m) === activeFolder);
+  // Archived memos are hidden from every normal view — they only resurface in
+  // the dedicated "보관" group at the end of the 전체 tab.
+  const visibleMemos = memos.filter(m => !m.archived);
+  const filteredMemos = activeFolder === "ALL" || activeFolder === "전체" ? visibleMemos
+    : activeFolder === "고정" ? visibleMemos.filter(m => m.pinned)
+    : activeFolder === "중요" ? visibleMemos.filter(m => m.important)
+    : visibleMemos.filter(m => effectiveFolder(m) === activeFolder);
 
   const folderColor = (f: string): string | undefined => {
     if (!cfg) return undefined;
@@ -1249,11 +1269,15 @@ export default function WidgetPage() {
     if (activeFolder !== "전체" || folderList.length === 0) return null;
     const groups = new Map<string, Memo[]>();
     for (const f of folderList) groups.set(f, []);
+    const archivedMemos: Memo[] = [];
     for (const m of memos) {
+      if (m.archived) { archivedMemos.push(m); continue; }
       const f = m.folder || defaultFolder;
       if (groups.has(f)) groups.get(f)!.push(m);
       else groups.set(f, [m]);
     }
+    // 보관함은 항상 마지막 항목으로. 전체 탭에서만 노출된다.
+    if (archivedMemos.length > 0) groups.set(ARCHIVE_GROUP, archivedMemos);
     return groups;
   })();
 
@@ -1273,6 +1297,7 @@ export default function WidgetPage() {
         mobile={mobile}
         onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
         onImportant={() => updateMemo(memo.id, { important: !memo.important })}
+        onArchive={() => updateMemo(memo.id, { archived: !memo.archived })}
         onDelete={() => deleteMemo(memo.id)}
         onToggle={(tid, checked) => toggleTodo(tid, checked, memo.id)}
         onEdit={(content) => editMemo(memo.id, content)}
@@ -1451,13 +1476,16 @@ export default function WidgetPage() {
             {/* 전체 tab: grouped by folder with collapsible sections */}
             {activeFolder === "전체" && folderGroups
               ? Array.from(folderGroups.entries()).map(([folder, fMemos]) => {
+                  const isArchive = folder === ARCHIVE_GROUP;
                   const isExpanded = expandedFolders.size === 0 ? folder === defaultFolder : expandedFolders.has(folder);
-                  const fColor = folderColor(folder) ?? "var(--accent)";
+                  const fColor = isArchive ? "#a8a8b3" : (folderColor(folder) ?? "var(--accent)");
                   return (
                     <div key={folder} style={{ marginBottom: 4 }}>
                       <button onClick={() => toggleFolderExpand(folder)}
                         style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", padding:"4px 4px 4px 2px", width:"100%", textAlign:"left", color:"var(--text-color)", fontFamily:"inherit" }}>
-                        <FolderIcon size={13} fill={fColor} stroke={fColor} />
+                        {isArchive
+                          ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={fColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg>
+                          : <FolderIcon size={13} fill={fColor} stroke={fColor} />}
                         <span style={{ fontSize:11, fontWeight:600, opacity:0.65 }}>{folder}</span>
                         <span style={{ fontSize:10, opacity:0.3, marginLeft:1 }}>{fMemos.length}</span>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"

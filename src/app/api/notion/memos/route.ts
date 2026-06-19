@@ -211,6 +211,7 @@ export async function GET(req: NextRequest) {
   const folderProp = p.get("folderProp") ?? null;
   const pinnedProp = p.get("pinnedProp") ?? null;
   const importantProp = p.get("importantProp") ?? null;
+  const archivedProp = p.get("archivedProp") ?? null;
   const replyProp = p.get("replyProp") ?? null;
 
   try {
@@ -238,6 +239,7 @@ export async function GET(req: NextRequest) {
         const folder = folderProp && props[folderProp]?.select?.name ? props[folderProp].select!.name : "";
         const pinned = pinnedProp ? (props[pinnedProp]?.checkbox ?? false) : false;
         const important = importantProp ? (props[importantProp]?.checkbox ?? false) : false;
+        const archived = archivedProp ? (props[archivedProp]?.checkbox ?? false) : false;
         const replyStr = replyProp ? (props[replyProp]?.rich_text ?? []).map((r: RT) => r.plain_text).join("") : "";
         const replies = replyStr ? replyStr.split("|||").filter(Boolean) : [];
 
@@ -259,7 +261,7 @@ export async function GET(req: NextRequest) {
           todos: parseBlocksToTodos(rawBlocks),
           imageUrls: [...parseBlocksToImageUrls(rawBlocks), ...propFileUrls],
           createdAt: parseDate(page.created_time as string),
-          replies, pinned, important, folder,
+          replies, pinned, important, archived, folder,
         };
       })
     );
@@ -272,7 +274,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, databaseId, content, folder, folderProp, pinnedProp, importantProp, dateProp, imageUploadIds } = await req.json();
+    const { token, databaseId, content, folder, folderProp, pinnedProp, importantProp, archivedProp, dateProp, imageUploadIds } = await req.json();
 
     // Top-level text blocks become the indentation tree; images append as flat
     // root-level blocks after the text.
@@ -291,6 +293,7 @@ export async function POST(req: NextRequest) {
     if (folderProp && folder) properties[folderProp] = { select: { name: folder } };
     if (pinnedProp)    properties[pinnedProp]    = { checkbox: false };
     if (importantProp) properties[importantProp] = { checkbox: false };
+    if (archivedProp)  properties[archivedProp]  = { checkbox: false };
     if (dateProp) properties[dateProp] = { date: { start: new Date().toISOString() } };
 
     // Create the page empty, then append the block tree level-by-level so we
