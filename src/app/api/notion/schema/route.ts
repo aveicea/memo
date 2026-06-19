@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       folderPropName: selectEntry?.[0] ?? null,
       pinnedPropName: checkboxes.find(k => /고정|pin/i.test(k)) ?? checkboxes[0] ?? null,
       importantPropName: checkboxes.find(k => /중요|import/i.test(k)) ?? checkboxes[1] ?? null,
+      archivedPropName: checkboxes.find(k => /보관|archive|보존/i.test(k)) ?? null,
       replyPropName: richTexts.find(k => /답글|reply/i.test(k)) ?? richTexts[0] ?? null,
       datePropName: dates.find(k => /날짜|date|time|created/i.test(k)) ?? dates[0] ?? null,
     });
