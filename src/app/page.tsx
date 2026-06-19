@@ -1080,6 +1080,15 @@ export default function WidgetPage() {
     updateMemo(memo.id, { archived: next });
   }
 
+  // Archive a memo by id (used when dragging a memo onto the 보관 sidebar tab).
+  function archiveMemo(id: string) {
+    const memo = memos.find(m => m.id === id);
+    setArchivedAll(prev => prev.some(m => m.id === id)
+      ? prev
+      : memo ? [...prev, { ...memo, archived: true }] : prev);
+    updateMemo(id, { archived: true });
+  }
+
   async function deleteMemo(id: string) {
     if (!cfg) return;
     setMemos(prev => prev.filter(m => m.id !== id));
@@ -1290,6 +1299,7 @@ export default function WidgetPage() {
   const filteredMemos = activeFolder === "ALL" || activeFolder === "전체" ? visibleMemos
     : activeFolder === "고정" ? visibleMemos.filter(m => m.pinned)
     : activeFolder === "중요" ? visibleMemos.filter(m => m.important)
+    : activeFolder === ARCHIVE_GROUP ? archivedAll
     : visibleMemos.filter(m => effectiveFolder(m) === activeFolder);
 
   const folderColor = (f: string): string | undefined => {
@@ -1305,13 +1315,20 @@ export default function WidgetPage() {
     return i >= 0 ? (cfg.folderBubblePalette[i] || undefined) : undefined;
   };
 
-  const sidebarItems: Array<{ type: "folder"|"pinned"|"important"|"empty"; label?: string; color?: string }> = [];
-  folderList.forEach((f, i) => {
-    sidebarItems.push({ type: "folder", label: f, color: cfg?.folderColorPalette?.[i] ?? "var(--accent)" });
-    if (i === 0) sidebarItems.push({ type: "pinned" });
-    else if (i === 1) sidebarItems.push({ type: "important" });
-    else sidebarItems.push({ type: "empty" });
-  });
+  // 2-column sidebar grid: folders flow down the left column, the special tabs
+  // (고정/중요/보관) sit in the right column's first three rows — regardless of
+  // how many folders there are, so 보관 always appears under 중요.
+  const sidebarItems: Array<{ type: "folder"|"pinned"|"important"|"archive"|"empty"; label?: string; color?: string }> = [];
+  const specialItems: Array<{ type: "pinned"|"important"|"archive" }> = [
+    { type: "pinned" }, { type: "important" }, { type: "archive" },
+  ];
+  const sidebarRows = Math.max(folderList.length, specialItems.length);
+  for (let r = 0; r < sidebarRows; r++) {
+    sidebarItems.push(r < folderList.length
+      ? { type: "folder", label: folderList[r], color: cfg?.folderColorPalette?.[r] ?? "var(--accent)" }
+      : { type: "empty" });
+    sidebarItems.push(r < specialItems.length ? specialItems[r] : { type: "empty" });
+  }
 
   const replyingMemo = replyingTo ? memos.find(m => m.id === replyingTo) : null;
 
@@ -1457,22 +1474,25 @@ export default function WidgetPage() {
             }}>
               {sidebarItems.map((item, i) => {
                 if (item.type === "empty") return <div key={i} />;
-                const isSpecial = item.type === "pinned" || item.type === "important";
-                const label = item.type === "pinned" ? "고정" : item.type === "important" ? "중요" : item.label!;
-                const color = isSpecial ? "var(--accent)" : item.color!;
+                const isSpecial = item.type === "pinned" || item.type === "important" || item.type === "archive";
+                const isArchive = item.type === "archive";
+                const isDroppable = item.type === "folder" || isArchive;
+                const label = item.type === "pinned" ? "고정" : item.type === "important" ? "중요" : isArchive ? "보관" : item.label!;
+                const color = item.type === "pinned" || item.type === "important" ? "var(--accent)"
+                  : isArchive ? "#a8a8b3" : item.color!;
                 const isActive = activeFolder === label;
-                const isDragOver = !isSpecial && dragOverFolder === label;
+                const isDragOver = isDroppable && dragOverFolder === label;
                 return (
                   <div key={i} className="y2k-folder-btn"
                     onClick={() => setFolder(label)}
-                    onDragOver={isSpecial ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolder(label); }}
-                    onDragLeave={isSpecial ? undefined : () => setDragOverFolder(null)}
-                    onDrop={isSpecial ? undefined : e => {
+                    onDragOver={isDroppable ? e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolder(label); } : undefined}
+                    onDragLeave={isDroppable ? () => setDragOverFolder(null) : undefined}
+                    onDrop={isDroppable ? e => {
                       e.preventDefault();
                       const memoId = e.dataTransfer.getData("text/plain");
-                      if (memoId) updateMemo(memoId, { folder: label });
+                      if (memoId) { if (isArchive) archiveMemo(memoId); else updateMemo(memoId, { folder: label }); }
                       setDragOverFolder(null);
-                    }}
+                    } : undefined}
                     style={{
                       display:"flex", flexDirection:"column", alignItems:"center", gap:1,
                       padding:"3px 4px", borderRadius:4, cursor:"pointer",
