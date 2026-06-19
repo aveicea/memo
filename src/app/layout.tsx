@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bubble Memo",
+  title: "메모",
   description: "노션 메모 임베드 위젯",
 };
 
