@@ -699,6 +699,9 @@ export default function WidgetPage() {
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
+  // When older memos are prepended at the top, we keep the memo the reader was
+  // looking at stationary by anchoring on its DOM element (id + viewport offset).
+  const anchorRef = useRef<{ id: string; offset: number } | null>(null);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
 
@@ -766,6 +769,19 @@ export default function WidgetPage() {
     }
   }
 
+  // Re-pin the anchored memo to the offset it had before older pages were
+  // prepended. Robust to late-loading images/fonts (call it again as they land).
+  const restoreAnchor = useCallback(() => {
+    const a = anchorRef.current;
+    const scrollEl = scrollRef.current;
+    if (!a || !scrollEl) return;
+    const el = scrollEl.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
+    if (!el) return;
+    const newOffset = el.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
+    const delta = newOffset - a.offset;
+    if (delta !== 0) scrollEl.scrollTop += delta;
+  }, []);
+
   const loadMemos = useCallback(async (cursor?: string) => {
     if (!cfg) return;
     setLoading(true);
@@ -782,12 +798,21 @@ export default function WidgetPage() {
       const d = await r.json();
       const reversed = [...(d.memos ?? [])].reverse();
       if (cursor) {
+        // Anchor on the memo currently at the top of the list so it stays put
+        // when older memos are inserted above it. The actual scroll correction
+        // happens synchronously in a layout effect (before paint), with extra
+        // passes scheduled below to absorb late image/font height changes.
         const scrollEl = scrollRef.current;
-        const prevScrollHeight = scrollEl?.scrollHeight ?? 0;
+        const anchorEl = scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null;
+        if (scrollEl && anchorEl) {
+          anchorRef.current = {
+            id: anchorEl.getAttribute("data-guestbook-entry-id")!,
+            offset: anchorEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top,
+          };
+        }
         setMemos(prev => [...reversed, ...prev]);
-        setTimeout(() => {
-          if (scrollEl) scrollEl.scrollTop += scrollEl.scrollHeight - prevScrollHeight;
-        }, 0);
+        [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
+        setTimeout(() => { anchorRef.current = null; }, 800);
       } else {
         setMemos(reversed);
         // Stay pinned to the bottom until the user actually scrolls. A
@@ -805,7 +830,13 @@ export default function WidgetPage() {
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
     } finally { setLoading(false); }
-  }, [cfg]);
+  }, [cfg, restoreAnchor]);
+
+  // Before the browser paints the prepended memos, shift scrollTop so the
+  // anchored memo keeps its on-screen position — no visible jump.
+  useLayoutEffect(() => {
+    if (anchorRef.current) restoreAnchor();
+  }, [memos, restoreAnchor]);
 
   useEffect(() => { loadMemosRef.current = loadMemos; }, [loadMemos]);
 
@@ -822,7 +853,7 @@ export default function WidgetPage() {
     if (!el) return;
     // Only a genuine user gesture (wheel/touch) ends the bottom-pin — never a
     // timer — so the view follows the bottom until the reader scrolls away.
-    const cancelInitial = () => { initialScrollRef.current = false; };
+    const cancelInitial = () => { initialScrollRef.current = false; anchorRef.current = null; };
     const pinIfInitial = () => {
       if (initialScrollRef.current) el.scrollTop = el.scrollHeight;
     };
