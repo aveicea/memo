@@ -461,7 +461,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile, co
         ].map(a => (
           <button key={a.label} onClick={a.onClick} title={a.label}
             style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 6px" : "2px 6px", lineHeight: 1,
-              color: "#bbb", fontSize: mobile ? 12 : 10, fontFamily: "inherit", flexShrink: 0,
+              color: "#bbb", fontSize: 10, fontFamily: "inherit", flexShrink: 0,
               display: "flex", alignItems: "center", gap: 3, transition: "color 0.15s" }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
             onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}
@@ -703,7 +703,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, compact, can
           ].map(a => (
             <button key={a.label} onClick={a.onClick} title={a.label}
               style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 6px" : "2px 6px", lineHeight: 1,
-                color: "#bbb", fontSize: mobile ? 12 : 10, fontFamily: "inherit",
+                color: "#bbb", fontSize: 10, fontFamily: "inherit",
                 display: "flex", alignItems: "center", gap: 3, flexShrink: 0,
                 transition: "color 0.15s" }}
               onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
