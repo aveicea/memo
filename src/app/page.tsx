@@ -236,6 +236,26 @@ const MEMO_MAX_LINES = 6;
 // Label for the synthetic "archived" group shown last in the 전체 tab.
 const ARCHIVE_GROUP = "보관";
 
+// Per-database memo cache so the feed paints instantly on revisit (then the
+// background refresh reconciles it). Keyed by databaseId; pending/optimistic
+// bubbles are stripped before storing.
+const MEMO_CACHE_PREFIX = "memo-cache-v1:";
+function readMemoCache(dbId: string): { memos: Memo[]; archived: Memo[] } | null {
+  try {
+    const raw = localStorage.getItem(MEMO_CACHE_PREFIX + dbId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.memos)) return null;
+    return { memos: parsed.memos as Memo[], archived: Array.isArray(parsed.archived) ? parsed.archived as Memo[] : [] };
+  } catch { return null; }
+}
+function writeMemoCache(dbId: string, memos: Memo[], archived: Memo[]) {
+  try {
+    const strip = (arr: Memo[]) => arr.filter(m => !m.pending);
+    localStorage.setItem(MEMO_CACHE_PREFIX + dbId, JSON.stringify({ memos: strip(memos), archived: strip(archived) }));
+  } catch { /* storage full / unavailable — caching is best-effort */ }
+}
+
 function MemoContent({ content, todos, onToggle, expanded }: {
   content: string; todos: Todo[];
   onToggle: (id: string, checked: boolean) => void;
@@ -312,10 +332,19 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
 }) {
   const [hover, setHover] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [rowShow, setRowShow] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(text);
   const [copied, setCopied] = useState(false);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const rowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bottom action row (답글/수정/삭제) only appears after the cursor lingers,
+  // matching the main bubble. The copy icon still shows instantly on hover.
+  function scheduleRow(show: boolean) {
+    if (rowTimer.current) clearTimeout(rowTimer.current);
+    rowTimer.current = setTimeout(() => setRowShow(show), show ? 800 : 140);
+  }
 
   function copy() {
     navigator.clipboard.writeText(text).catch(() => {
@@ -372,7 +401,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
   }
 
   return (
-    <div onMouseEnter={mobile ? undefined : () => setHover(true)} onMouseLeave={mobile ? undefined : () => setHover(false)}
+    <div onMouseEnter={mobile ? undefined : () => { setHover(true); scheduleRow(true); }} onMouseLeave={mobile ? undefined : () => { setHover(false); scheduleRow(false); }}
       style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", flexDirection: "column", gap: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
         <div onClick={mobile ? () => setShowActions(v => !v) : undefined}
@@ -417,7 +446,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
           {copied ? <span style={{ fontSize: 9, color: "var(--accent)" }}>✓</span> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
         </button>
       </div>
-      <div style={{ display: "flex", gap: mobile ? 4 : 1, height: show ? (mobile ? 30 : 20) : 0, overflow: "hidden", transition: "height 0.15s" }}>
+      <div style={{ display: "flex", gap: mobile ? 4 : 1, height: (rowShow || showActions) ? (mobile ? 30 : 20) : 0, overflow: "hidden", transition: "height 0.15s" }}>
         {[
           { label: "답글", onClick: onReply, icon: <ReplyIcon /> },
           { label: "수정", onClick: startEdit, icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
@@ -713,6 +742,14 @@ export default function WidgetPage() {
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
 
+  // Paint last session's memos instantly from cache, so the feed isn't blank
+  // while the fresh data loads in the background (see the load effects below).
+  function hydrateFromCache(dbId?: string) {
+    if (!dbId) return;
+    const cached = readMemoCache(dbId);
+    if (cached) { setMemos(cached.memos); setArchivedAll(cached.archived); }
+  }
+
   useEffect(() => {
     // 1) A config embedded in the URL (?config=base64) takes priority.
     //    Keep it in the URL so the user can always copy the share link from the bar.
@@ -722,6 +759,7 @@ export default function WidgetPage() {
       const decoded = decodeConfig<Config>(encoded);
       if (decoded?.token) {
         localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(decoded));
+        hydrateFromCache(decoded.databaseId);
         setCfg(decoded);
         setCfgLoaded(true);
         return; // URL stays as-is — the user can copy it as a share link
@@ -731,10 +769,20 @@ export default function WidgetPage() {
     const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Config;
+      hydrateFromCache(parsed.databaseId);
       setCfg(parsed);
     }
     setCfgLoaded(true);
   }, []);
+
+  // Persist the loaded memos (debounced) so the next visit hydrates instantly.
+  // Skip while a load is in flight so the background chain-load doesn't cache a
+  // momentarily-short snapshot — the timer only survives once loading settles.
+  useEffect(() => {
+    if (!cfg?.databaseId || loading) return;
+    const t = setTimeout(() => writeMemoCache(cfg.databaseId, memos, archivedAll), 500);
+    return () => clearTimeout(t);
+  }, [memos, archivedAll, cfg?.databaseId, loading]);
 
   // Back-fill the archive property for configs saved before the 보관 feature
   // existed. Without this, an old config has no archivedProp, so pressing 보관
