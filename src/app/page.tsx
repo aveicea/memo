@@ -256,6 +256,12 @@ function writeMemoCache(dbId: string, memos: Memo[], archived: Memo[]) {
   } catch { /* storage full / unavailable — caching is best-effort */ }
 }
 
+// Strip the checkbox markup (- [ ] / - [x]) when copying so the clipboard gets
+// plain text, not the literal markdown box.
+function stripCopyMarkup(s: string): string {
+  return s.split("\n").map(line => line.replace(/^(\s*)- \[[ xX]\] /, "$1")).join("\n");
+}
+
 function MemoContent({ content, todos, onToggle, expanded }: {
   content: string; todos: Todo[];
   onToggle: (id: string, checked: boolean) => void;
@@ -347,9 +353,10 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
   }
 
   function copy() {
-    navigator.clipboard.writeText(text).catch(() => {
+    const out = stripCopyMarkup(text);
+    navigator.clipboard.writeText(out).catch(() => {
       const ta = document.createElement("textarea");
-      ta.value = text; document.body.appendChild(ta); ta.select();
+      ta.value = out; document.body.appendChild(ta); ta.select();
       document.execCommand("copy"); document.body.removeChild(ta);
     });
     setCopied(true); setTimeout(() => setCopied(false), 1500);
@@ -406,8 +413,8 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
         <div onClick={mobile ? () => setShowActions(v => !v) : undefined}
           style={{
-            background: "var(--reply-bubble-color)", padding: mobile ? "10px 14px" : "8px 12px",
-            borderRadius: "12px 12px 12px 2px", fontSize: mobile ? 15 : 13,
+            background: "var(--reply-bubble-color)", padding: mobile ? "9px 13px" : "8px 12px",
+            borderRadius: "12px 12px 12px 2px", fontSize: 13,
             color: "var(--reply-text-color)", lineHeight: 1.4,
             wordBreak: "break-word", fontFamily: "inherit", cursor: mobile ? "pointer" : "default",
           }}>
@@ -446,19 +453,19 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
           {copied ? <span style={{ fontSize: 9, color: "var(--accent)" }}>✓</span> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
         </button>
       </div>
-      <div style={{ display: "flex", gap: mobile ? 4 : 1, height: (rowShow || showActions) ? (mobile ? 30 : 20) : 0, overflow: "hidden", transition: "height 0.15s" }}>
+      <div style={{ display: "flex", flexWrap: "nowrap", gap: mobile ? 8 : 1, height: (rowShow || showActions) ? (mobile ? 30 : 20) : 0, overflow: "hidden", transition: "height 0.15s" }}>
         {[
           { label: "답글", onClick: onReply, icon: <ReplyIcon /> },
           { label: "수정", onClick: startEdit, icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
           { label: "삭제", onClick: onDelete, icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> },
         ].map(a => (
           <button key={a.label} onClick={a.onClick} title={a.label}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 10px" : "2px 6px", lineHeight: 1,
-              color: "#bbb", fontSize: mobile ? 12 : 10, fontFamily: "inherit",
+            style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 6px" : "2px 6px", lineHeight: 1,
+              color: "#bbb", fontSize: mobile ? 12 : 10, fontFamily: "inherit", flexShrink: 0,
               display: "flex", alignItems: "center", gap: 3, transition: "color 0.15s" }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
             onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}
-          >{a.icon}{a.label}</button>
+          >{a.icon}{!mobile && a.label}</button>
         ))}
       </div>
     </div>
@@ -510,9 +517,10 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
   }, [editText]);
 
   function copyText() {
-    navigator.clipboard.writeText(memo.content).catch(() => {
+    const out = stripCopyMarkup(memo.content);
+    navigator.clipboard.writeText(out).catch(() => {
       const ta = document.createElement("textarea");
-      ta.value = memo.content; document.body.appendChild(ta); ta.select();
+      ta.value = out; document.body.appendChild(ta); ta.select();
       document.execCommand("copy"); document.body.removeChild(ta);
     });
     setCopied(true); setTimeout(() => setCopied(false), 1500);
@@ -656,8 +664,8 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
             style={{
               maxWidth: mobile ? "90%" : "75%",
               background: bubbleBg, border: "none",
-              padding: mobile ? "10px 15px" : "9px 14px", borderRadius: "12px 12px 2px 12px",
-              fontSize: mobile ? 15 : 13, color: textColor, lineHeight: 1.4,
+              padding: mobile ? "9px 13px" : "9px 14px", borderRadius: "12px 12px 2px 12px",
+              fontSize: 13, color: textColor, lineHeight: 1.4,
               overflowWrap: "break-word", wordBreak: "normal", whiteSpace: "pre-wrap",
               boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
               transition: "background 0.2s, color 0.2s",
@@ -678,7 +686,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
         <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
           onMouseLeave={mobile ? undefined : () => scheduleActions(false)}
           style={{
-            alignSelf: "flex-end", display: "flex", gap: mobile ? 4 : 1,
+            alignSelf: "flex-end", display: "flex", flexWrap: "nowrap", gap: mobile ? 8 : 1,
             height: showActions ? (mobile ? 30 : 20) : 0, overflow: "hidden",
             transition: "height 0.15s",
           }}>
@@ -692,13 +700,13 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
               icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> },
           ].map(a => (
             <button key={a.label} onClick={a.onClick} title={a.label}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 10px" : "2px 6px", lineHeight: 1,
+              style={{ background: "none", border: "none", cursor: "pointer", padding: mobile ? "5px 6px" : "2px 6px", lineHeight: 1,
                 color: "#bbb", fontSize: mobile ? 12 : 10, fontFamily: "inherit",
-                display: "flex", alignItems: "center", gap: 3,
+                display: "flex", alignItems: "center", gap: 3, flexShrink: 0,
                 transition: "color 0.15s" }}
               onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
               onMouseLeave={e => (e.currentTarget.style.color = "#bbb")}
-            >{a.icon}{a.label}</button>
+            >{a.icon}{!mobile && a.label}</button>
           ))}
         </div>
       </div>
@@ -733,6 +741,9 @@ export default function WidgetPage() {
   const [pendingImages, setPendingImages] = useState<{ blob: Blob; preview: string }[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  // Visible viewport height (mobile): tracks the on-screen area so the widget
+  // shrinks to fit above the keyboard instead of leaving a white gap on top.
+  const [viewportH, setViewportH] = useState<number | null>(null);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
@@ -1018,16 +1029,22 @@ export default function WidgetPage() {
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   }, [inputText]);
 
-  // On mobile, keep scroll pinned to bottom when keyboard opens/closes
+  // On mobile, fit the widget to the visible viewport (above the keyboard) and
+  // keep scroll pinned to the bottom when the keyboard opens/closes.
   useEffect(() => {
     if (!mobile) return;
+    const vv = window.visualViewport;
     const handler = () => {
-      // Always scroll to bottom when keyboard opens — clientHeight shrinks so
-      // nearBottom checks are unreliable here.
+      if (vv) setViewportH(vv.height);
+      // Pin the page to the top so the shrunken widget aligns with the viewport
+      // (no white band above), then keep the latest memo in view.
+      window.scrollTo(0, 0);
       setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
     };
-    window.visualViewport?.addEventListener("resize", handler);
-    return () => window.visualViewport?.removeEventListener("resize", handler);
+    handler();
+    vv?.addEventListener("resize", handler);
+    vv?.addEventListener("scroll", handler);
+    return () => { vv?.removeEventListener("resize", handler); vv?.removeEventListener("scroll", handler); };
   }, [mobile]);
 
   // Restore cursor after Tab indentation / Shift+Enter list continuation.
@@ -1227,8 +1244,9 @@ export default function WidgetPage() {
   function handleTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.nativeEvent.isComposing) return;
     if (e.key === "Escape" && replyingTo) { setReplyingTo(null); return; }
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMemo(e as unknown as React.FormEvent); return; }
-    if (e.key === "Enter" && e.shiftKey) {
+    // On mobile, Enter never sends — it's just a newline (send via the button).
+    if (e.key === "Enter" && !e.shiftKey && !mobile) { e.preventDefault(); sendMemo(e as unknown as React.FormEvent); return; }
+    if (e.key === "Enter" && (e.shiftKey || mobile)) {
       // Continue the current list item on Shift+Enter (Notion-style): a new
       // line inside a checkbox/bullet should keep the same marker + indent.
       const ta = e.currentTarget;
@@ -1451,7 +1469,7 @@ export default function WidgetPage() {
 
   return (
     <div style={{
-      width:"100%", height:"100dvh", boxSizing:"border-box", overflow:"hidden",
+      width:"100%", height: mobile && viewportH ? viewportH : "100dvh", boxSizing:"border-box", overflow:"hidden",
       padding: mobile ? 0 : (widget ? "15px 20px 20px" : 16), display:"flex", alignItems:"center", justifyContent:"center",
       fontFamily: fontFamily, background:"#ffffff",
     }}>
@@ -1658,7 +1676,7 @@ export default function WidgetPage() {
 
         {/* Input form */}
         <form onSubmit={sendMemo} style={{
-          paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 4px) + 4px)" : 8,
+          paddingBottom: mobile ? "calc(env(safe-area-inset-bottom, 0px) + 12px)" : 8,
           borderTop:"1px dotted var(--border-dot)",
           display: minimized ? "none" : "flex", flexDirection:"column", background:"var(--bg-color)", flexShrink:0,
         }}>
@@ -1731,33 +1749,37 @@ export default function WidgetPage() {
                 }} />
             </label>
 
-            {/* Textarea with markdown preview overlay */}
+            {/* Textarea. Desktop overlays a styled markdown preview on a
+                transparent textarea; mobile uses a plain visible textarea so the
+                caret sits naturally after the text and there's no preview shimmer. */}
             <div style={{ flex: 1, position: "relative" }}>
-              {/* Rendered markdown preview (sits on top, pointer-events none) */}
-              <div aria-hidden style={{
-                position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
-                padding: mobile ? "9px 12px" : "7px 10px", fontSize: mobile ? 16 : 13, fontFamily: "inherit", lineHeight: 1.5,
-                color: "var(--text-color)", pointerEvents: "none",
-                whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "hidden",
-              }}>
-                {inputText
-                  ? renderInputPreview(inputText)
-                  : <span style={{ color: "#bbb", fontStyle: "normal" }}>{replyingMemo ? "답글 입력..." : "memo"}</span>
-                }
-              </div>
+              {/* Rendered markdown preview (desktop only; pointer-events none) */}
+              {!mobile && (
+                <div aria-hidden style={{
+                  position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+                  padding: "7px 10px", fontSize: 13, fontFamily: "inherit", lineHeight: 1.5,
+                  color: "var(--text-color)", pointerEvents: "none",
+                  whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "hidden",
+                }}>
+                  {inputText
+                    ? renderInputPreview(inputText)
+                    : <span style={{ color: "#bbb", fontStyle: "normal" }}>{replyingMemo ? "답글 입력..." : "memo"}</span>
+                  }
+                </div>
+              )}
               <textarea ref={textareaRef} value={inputText}
                 onChange={e => setInputText(applyMarkdownShortcuts(e.target.value))}
                 onKeyDown={handleTextareaKeyDown}
                 onPaste={handlePaste}
-                placeholder="" autoComplete="off" rows={1}
+                placeholder={mobile ? (replyingMemo ? "답글 입력..." : "memo") : ""} autoComplete="off" rows={1}
                 className="y2k-input"
                 style={{
-                  display: "block", width: "100%", padding: mobile ? "9px 12px" : "7px 10px",
+                  display: "block", width: "100%", padding: mobile ? "8px 12px" : "7px 10px",
                   border: "1px solid var(--border-color, #e8e8e8)",
-                  borderRadius: 4, fontSize: mobile ? 16 : 13, fontFamily: "inherit",
-                  color: "transparent", caretColor: "var(--text-color)",
+                  borderRadius: 4, fontSize: mobile ? 14 : 13, fontFamily: "inherit",
+                  color: mobile ? "var(--text-color)" : "transparent", caretColor: "var(--text-color)",
                   outline: "none", background: "var(--bg-color)", transition: "border 0.2s ease",
-                  resize: "none", overflow: "hidden", lineHeight: 1.5, minHeight: mobile ? 40 : 32, maxHeight: 120,
+                  resize: "none", overflow: "hidden", lineHeight: 1.5, minHeight: mobile ? 36 : 32, maxHeight: 120,
                   boxSizing: "border-box",
                 }}
               />
