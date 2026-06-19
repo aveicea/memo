@@ -577,7 +577,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
 
           {/* LEFT ACTIONS: visible on hover/showActions (desktop), tap to reveal (mobile) */}
           <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-            <div style={{ maxWidth: (hover || showActions) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || showActions || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
@@ -585,7 +585,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
                 onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
               ><PinIcon /></button>
             </div>
-            <div style={{ maxWidth: (hover || showActions) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
+            <div style={{ maxWidth: (hover || showActions || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
                   color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
@@ -601,6 +601,21 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
               >{copied ? <span style={{ fontSize: 9, color: "var(--accent)" }}>✓</span> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button>
             </div>
           </div>
+
+          {/* 더보기/접기 — 말풍선 바로 왼쪽 */}
+          {(() => {
+            const lineCount = parseLines(memo.content).length;
+            if (lineCount <= MEMO_MAX_LINES) return null;
+            return (
+              <button onClick={() => setExpanded(v => !v)}
+                style={{ alignSelf: "flex-end", background: "none", border: "none", cursor: "pointer",
+                  padding: mobile ? "4px 6px" : "2px 4px", fontSize: 10, color: textColor,
+                  opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s",
+                  whiteSpace: "nowrap", flexShrink: 0 }}>
+                {expanded ? "접기 ↑" : `...더보기 (+${lineCount - MEMO_MAX_LINES})`}
+              </button>
+            );
+          })()}
 
           {/* BUBBLE */}
           <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
@@ -626,20 +641,6 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
             )}
           </div>
         </div>
-
-        {/* 더보기/접기 — outside the bubble, left-aligned */}
-        {(() => {
-          const lineCount = parseLines(memo.content).length;
-          if (lineCount <= MEMO_MAX_LINES) return null;
-          return (
-            <button onClick={() => setExpanded(v => !v)}
-              style={{ alignSelf: "flex-start", background: "none", border: "none", cursor: "pointer",
-                padding: mobile ? "4px 6px" : "2px 4px", fontSize: 10, color: textColor,
-                opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s" }}>
-              {expanded ? "접기 ↑" : `...더보기 (+${lineCount - MEMO_MAX_LINES})`}
-            </button>
-          );
-        })()}
 
         {/* BELOW ACTIONS: 답글, 수정, 삭제 — hover (desktop) or tap the bubble (mobile) */}
         <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
