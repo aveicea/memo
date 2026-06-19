@@ -688,6 +688,9 @@ export default function WidgetPage() {
   const [cfg, setCfg]               = useState<Config | null>(null);
   const [cfgLoaded, setCfgLoaded]   = useState(false);
   const [memos, setMemos]           = useState<Memo[]>([]);
+  // Complete set of archived memos (fetched independently of the main feed's
+  // pagination) so the 전체 tab's 보관 group can show every archived memo.
+  const [archivedAll, setArchivedAll] = useState<Memo[]>([]);
   const [loading, setLoading]       = useState(false);
   const [activeFolder, setFolder]   = useState("ALL");
   const [showSidebar, setShowSidebar] = useState(true);
@@ -731,6 +734,31 @@ export default function WidgetPage() {
     }
     setCfgLoaded(true);
   }, []);
+
+  // Back-fill the archive property for configs saved before the 보관 feature
+  // existed. Without this, an old config has no archivedProp, so pressing 보관
+  // would never persist the checkbox to Notion.
+  useEffect(() => {
+    if (!cfgLoaded || !cfg?.token || !cfg.databaseId || cfg.archivedProp) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/notion/schema", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: cfg.token, databaseId: cfg.databaseId }),
+        });
+        const d = await r.json();
+        if (cancelled || !d.archivedPropName) return;
+        setCfg(prev => {
+          if (!prev || prev.archivedProp) return prev;
+          const updated = { ...prev, archivedProp: d.archivedPropName as string };
+          try { localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+          return updated;
+        });
+      } catch { /* ignore — archive just stays unavailable */ }
+    })();
+    return () => { cancelled = true; };
+  }, [cfgLoaded, cfg?.token, cfg?.databaseId, cfg?.archivedProp]);
 
   useEffect(() => {
     const defaultF = cfg?.folderOptions?.[0] ?? "";
@@ -850,11 +878,30 @@ export default function WidgetPage() {
 
   useEffect(() => { loadMemosRef.current = loadMemos; }, [loadMemos]);
 
+  // Fetch the full archived set (all pages) for the 보관 group.
+  const loadArchived = useCallback(async () => {
+    if (!cfg?.token || !cfg.archivedProp) { setArchivedAll([]); return; }
+    try {
+      const q = new URLSearchParams({
+        token: cfg.token, databaseId: cfg.databaseId,
+        archivedProp: cfg.archivedProp, archivedOnly: "1",
+        ...(cfg.folderProp ? { folderProp: cfg.folderProp } : {}),
+        ...(cfg.pinnedProp ? { pinnedProp: cfg.pinnedProp } : {}),
+        ...(cfg.importantProp ? { importantProp: cfg.importantProp } : {}),
+        ...(cfg.replyProp ? { replyProp: cfg.replyProp } : {}),
+      });
+      const r = await fetch(`/api/notion/memos?${q}`);
+      const d = await r.json();
+      setArchivedAll([...(d.memos ?? [])].reverse());
+    } catch { /* keep whatever we have */ }
+  }, [cfg]);
+
   useEffect(() => {
     if (!cfgLoaded) return;
     if (!cfg?.token) { router.replace("/onboarding"); return; }
     loadMemos();
-  }, [cfgLoaded, cfg, loadMemos, router]);
+    loadArchived();
+  }, [cfgLoaded, cfg, loadMemos, loadArchived, router]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
@@ -1020,6 +1067,17 @@ export default function WidgetPage() {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: cfg.token, pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp, archivedProp: cfg.archivedProp, folderProp: cfg.folderProp, replyProp: cfg.replyProp, ...patch }),
     });
+  }
+
+  // Toggle a memo's archive flag. Persists the checkbox to Notion (via
+  // updateMemo) and keeps the dedicated archived list in sync so the memo moves
+  // between the normal views and the 전체 tab's 보관 group immediately.
+  function toggleArchive(memo: Memo) {
+    const next = !memo.archived;
+    setArchivedAll(prev => next
+      ? (prev.some(m => m.id === memo.id) ? prev : [...prev, { ...memo, archived: true }])
+      : prev.filter(m => m.id !== memo.id));
+    updateMemo(memo.id, { archived: next });
   }
 
   async function deleteMemo(id: string) {
@@ -1263,15 +1321,14 @@ export default function WidgetPage() {
     if (activeFolder !== "전체" || folderList.length === 0) return null;
     const groups = new Map<string, Memo[]>();
     for (const f of folderList) groups.set(f, []);
-    const archivedMemos: Memo[] = [];
     for (const m of memos) {
-      if (m.archived) { archivedMemos.push(m); continue; }
+      if (m.archived) continue; // archived live in their own group below
       const f = m.folder || defaultFolder;
       if (groups.has(f)) groups.get(f)!.push(m);
       else groups.set(f, [m]);
     }
-    // 보관함은 항상 마지막 항목으로. 전체 탭에서만 노출된다.
-    if (archivedMemos.length > 0) groups.set(ARCHIVE_GROUP, archivedMemos);
+    // 보관함은 비어 있어도 항상 마지막 항목으로 노출 (전체 탭 한정).
+    groups.set(ARCHIVE_GROUP, archivedAll);
     return groups;
   })();
 
@@ -1291,7 +1348,7 @@ export default function WidgetPage() {
         mobile={mobile}
         onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
         onImportant={() => updateMemo(memo.id, { important: !memo.important })}
-        onArchive={() => updateMemo(memo.id, { archived: !memo.archived })}
+        onArchive={() => toggleArchive(memo)}
         onDelete={() => deleteMemo(memo.id)}
         onToggle={(tid, checked) => toggleTodo(tid, checked, memo.id)}
         onEdit={(content) => editMemo(memo.id, content)}
