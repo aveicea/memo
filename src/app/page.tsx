@@ -472,12 +472,13 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile, co
   );
 }
 
-function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, compact, onPin, onImportant, onArchive, onDelete, onToggle, onEdit, onReply, onEditReply, onDeleteReply }: {
+function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, compact, canDrag, onPin, onImportant, onArchive, onDelete, onToggle, onEdit, onReply, onEditReply, onDeleteReply }: {
   memo: Memo;
   folderColor?: string;
   folderBubbleColor?: string;
   mobile?: boolean;
   compact?: boolean;
+  canDrag?: boolean;
   onPin: () => void; onImportant: () => void; onArchive: () => void; onDelete: () => void;
   onToggle: (id: string, checked: boolean) => void;
   onEdit: (content: string) => void;
@@ -605,7 +606,7 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, compact, onP
 
   return (
     <div data-guestbook-entry-id={memo.id}
-      draggable={!mobile}
+      draggable={!mobile && canDrag}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       style={{ padding: "5px 6px", display: "flex", flexDirection: "column", gap: 0, animation: "y2kFadeIn 0.3s ease", cursor: mobile ? "default" : "grab" }}>
@@ -1505,7 +1506,7 @@ export default function WidgetPage() {
       <MemoBubble key={memo.id} memo={memo}
         folderColor={folderColor(memo.folder)}
         folderBubbleColor={folderBubbleColor(memo.folder)}
-        mobile={mobile} compact={compactActions}
+        mobile={mobile} compact={compactActions} canDrag={showSidebar}
         onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
         onImportant={() => updateMemo(memo.id, { important: !memo.important })}
         onArchive={() => toggleArchive(memo)}
