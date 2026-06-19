@@ -896,7 +896,14 @@ export default function WidgetPage() {
           [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
           setTimeout(() => { anchorRef.current = null; }, 800);
         }
-        setMemos(prev => [...reversed, ...prev]);
+        // Dedupe by id: overlapping pages (e.g. a reload restarting the
+        // background chain while a previous fetch is still in flight) must not
+        // insert the same memo twice.
+        setMemos(prev => {
+          const seen = new Set(prev.map(m => m.id));
+          const fresh = reversed.filter((m: Memo) => !seen.has(m.id));
+          return fresh.length ? [...fresh, ...prev] : prev;
+        });
       } else {
         setMemos(reversed);
         // Stay pinned to the bottom until the user actually scrolls. A
@@ -1616,7 +1623,7 @@ export default function WidgetPage() {
                   return (
                     <div key={folder} style={{ marginBottom: 4 }}>
                       <button onClick={() => toggleFolderExpand(folder)}
-                        style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", padding:"4px 4px 4px 2px", width:"100%", textAlign:"left", color:"var(--text-color)", fontFamily:"inherit" }}>
+                        style={{ position:"sticky", top:0, zIndex:3, display:"flex", alignItems:"center", gap:5, background:"var(--bg-color)", border:"none", cursor:"pointer", padding:"4px 4px 4px 2px", width:"100%", textAlign:"left", color:"var(--text-color)", fontFamily:"inherit" }}>
                         {isArchive
                           ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={fColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg>
                           : <FolderIcon size={13} fill={fColor} stroke={fColor} />}
