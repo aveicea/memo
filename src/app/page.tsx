@@ -466,16 +466,10 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
   }
 
   const isImportant = memo.important;
-  // Archived memos (only seen in the 전체 tab's 보관 group) get a distinct muted
-  // bubble so they read clearly as a different property from folders/important.
-  const bubbleBg = memo.archived
-    ? "#ececf1"
-    : isImportant
+  const bubbleBg = isImportant
     ? "var(--reply-bubble-color)"
     : folderBubbleColor || (folderColor ? folderToBubbleColor(folderColor) : "var(--msg-bubble-color)");
-  const textColor = memo.archived
-    ? "#9a9aa6"
-    : isImportant ? "var(--reply-text-color)" : "var(--msg-text-color)";
+  const textColor = isImportant ? "var(--reply-text-color)" : "var(--msg-text-color)";
 
   useLayoutEffect(() => {
     if (editCursorRef.current !== null && editRef.current) {
