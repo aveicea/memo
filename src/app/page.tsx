@@ -236,6 +236,26 @@ const MEMO_MAX_LINES = 6;
 // Label for the synthetic "archived" group shown last in the 전체 tab.
 const ARCHIVE_GROUP = "보관";
 
+// Per-database memo cache so the feed paints instantly on revisit (then the
+// background refresh reconciles it). Keyed by databaseId; pending/optimistic
+// bubbles are stripped before storing.
+const MEMO_CACHE_PREFIX = "memo-cache-v1:";
+function readMemoCache(dbId: string): { memos: Memo[]; archived: Memo[] } | null {
+  try {
+    const raw = localStorage.getItem(MEMO_CACHE_PREFIX + dbId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.memos)) return null;
+    return { memos: parsed.memos as Memo[], archived: Array.isArray(parsed.archived) ? parsed.archived as Memo[] : [] };
+  } catch { return null; }
+}
+function writeMemoCache(dbId: string, memos: Memo[], archived: Memo[]) {
+  try {
+    const strip = (arr: Memo[]) => arr.filter(m => !m.pending);
+    localStorage.setItem(MEMO_CACHE_PREFIX + dbId, JSON.stringify({ memos: strip(memos), archived: strip(archived) }));
+  } catch { /* storage full / unavailable — caching is best-effort */ }
+}
+
 function MemoContent({ content, todos, onToggle, expanded }: {
   content: string; todos: Todo[];
   onToggle: (id: string, checked: boolean) => void;
@@ -312,10 +332,19 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
 }) {
   const [hover, setHover] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [rowShow, setRowShow] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(text);
   const [copied, setCopied] = useState(false);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const rowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bottom action row (답글/수정/삭제) only appears after the cursor lingers,
+  // matching the main bubble. The copy icon still shows instantly on hover.
+  function scheduleRow(show: boolean) {
+    if (rowTimer.current) clearTimeout(rowTimer.current);
+    rowTimer.current = setTimeout(() => setRowShow(show), show ? 800 : 140);
+  }
 
   function copy() {
     navigator.clipboard.writeText(text).catch(() => {
@@ -372,7 +401,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
   }
 
   return (
-    <div onMouseEnter={mobile ? undefined : () => setHover(true)} onMouseLeave={mobile ? undefined : () => setHover(false)}
+    <div onMouseEnter={mobile ? undefined : () => { setHover(true); scheduleRow(true); }} onMouseLeave={mobile ? undefined : () => { setHover(false); scheduleRow(false); }}
       style={{ alignSelf: "flex-start", maxWidth: mobile ? "90%" : "85%", marginTop: first ? 6 : 3, display: "flex", flexDirection: "column", gap: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
         <div onClick={mobile ? () => setShowActions(v => !v) : undefined}
@@ -417,7 +446,7 @@ function ReplyBubble({ text, first, index, onReply, onEdit, onDelete, mobile }: 
           {copied ? <span style={{ fontSize: 9, color: "var(--accent)" }}>✓</span> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
         </button>
       </div>
-      <div style={{ display: "flex", gap: mobile ? 4 : 1, height: show ? (mobile ? 30 : 20) : 0, overflow: "hidden", transition: "height 0.15s" }}>
+      <div style={{ display: "flex", gap: mobile ? 4 : 1, height: (rowShow || showActions) ? (mobile ? 30 : 20) : 0, overflow: "hidden", transition: "height 0.15s" }}>
         {[
           { label: "답글", onClick: onReply, icon: <ReplyIcon /> },
           { label: "수정", onClick: startEdit, icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
@@ -458,11 +487,12 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, onPin, onImp
   const editCursorRef = useRef<number | null>(null);
   const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 답글/수정/삭제 row: only appears when hovering the bubble's right side, and
-  // with a small delay so it isn't twitchy when the cursor just passes over.
+  // 답글/보관/수정/삭제 row: only appears after the cursor lingers on the bubble
+  // for a beat, so a passing cursor doesn't flash the buttons. Longer reveal
+  // delay than the side icons, which show instantly on hover.
   function scheduleActions(show: boolean) {
     if (actionTimer.current) clearTimeout(actionTimer.current);
-    actionTimer.current = setTimeout(() => setShowActions(show), show ? 320 : 140);
+    actionTimer.current = setTimeout(() => setShowActions(show), show ? 800 : 140);
   }
 
   const isImportant = memo.important;
@@ -688,6 +718,9 @@ export default function WidgetPage() {
   const [cfg, setCfg]               = useState<Config | null>(null);
   const [cfgLoaded, setCfgLoaded]   = useState(false);
   const [memos, setMemos]           = useState<Memo[]>([]);
+  // Complete set of archived memos (fetched independently of the main feed's
+  // pagination) so the 전체 tab's 보관 group can show every archived memo.
+  const [archivedAll, setArchivedAll] = useState<Memo[]>([]);
   const [loading, setLoading]       = useState(false);
   const [activeFolder, setFolder]   = useState("ALL");
   const [showSidebar, setShowSidebar] = useState(true);
@@ -709,6 +742,14 @@ export default function WidgetPage() {
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
 
+  // Paint last session's memos instantly from cache, so the feed isn't blank
+  // while the fresh data loads in the background (see the load effects below).
+  function hydrateFromCache(dbId?: string) {
+    if (!dbId) return;
+    const cached = readMemoCache(dbId);
+    if (cached) { setMemos(cached.memos); setArchivedAll(cached.archived); }
+  }
+
   useEffect(() => {
     // 1) A config embedded in the URL (?config=base64) takes priority.
     //    Keep it in the URL so the user can always copy the share link from the bar.
@@ -718,6 +759,7 @@ export default function WidgetPage() {
       const decoded = decodeConfig<Config>(encoded);
       if (decoded?.token) {
         localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(decoded));
+        hydrateFromCache(decoded.databaseId);
         setCfg(decoded);
         setCfgLoaded(true);
         return; // URL stays as-is — the user can copy it as a share link
@@ -727,10 +769,45 @@ export default function WidgetPage() {
     const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Config;
+      hydrateFromCache(parsed.databaseId);
       setCfg(parsed);
     }
     setCfgLoaded(true);
   }, []);
+
+  // Persist the loaded memos (debounced) so the next visit hydrates instantly.
+  // Skip while a load is in flight so the background chain-load doesn't cache a
+  // momentarily-short snapshot — the timer only survives once loading settles.
+  useEffect(() => {
+    if (!cfg?.databaseId || loading) return;
+    const t = setTimeout(() => writeMemoCache(cfg.databaseId, memos, archivedAll), 500);
+    return () => clearTimeout(t);
+  }, [memos, archivedAll, cfg?.databaseId, loading]);
+
+  // Back-fill the archive property for configs saved before the 보관 feature
+  // existed. Without this, an old config has no archivedProp, so pressing 보관
+  // would never persist the checkbox to Notion.
+  useEffect(() => {
+    if (!cfgLoaded || !cfg?.token || !cfg.databaseId || cfg.archivedProp) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/notion/schema", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: cfg.token, databaseId: cfg.databaseId }),
+        });
+        const d = await r.json();
+        if (cancelled || !d.archivedPropName) return;
+        setCfg(prev => {
+          if (!prev || prev.archivedProp) return prev;
+          const updated = { ...prev, archivedProp: d.archivedPropName as string };
+          try { localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+          return updated;
+        });
+      } catch { /* ignore — archive just stays unavailable */ }
+    })();
+    return () => { cancelled = true; };
+  }, [cfgLoaded, cfg?.token, cfg?.databaseId, cfg?.archivedProp]);
 
   useEffect(() => {
     const defaultF = cfg?.folderOptions?.[0] ?? "";
@@ -807,17 +884,19 @@ export default function WidgetPage() {
         // when older memos are inserted above it. The actual scroll correction
         // happens synchronously in a layout effect (before paint), with extra
         // passes scheduled below to absorb late image/font height changes.
+        // Skip anchoring while still bottom-pinned (auto-fill below) — there we
+        // want the view to stay at the bottom on the most recent memo.
         const scrollEl = scrollRef.current;
-        const anchorEl = scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null;
+        const anchorEl = initialScrollRef.current ? null : (scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null);
         if (scrollEl && anchorEl) {
           anchorRef.current = {
             id: anchorEl.getAttribute("data-guestbook-entry-id")!,
             offset: anchorEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top,
           };
+          [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
+          setTimeout(() => { anchorRef.current = null; }, 800);
         }
         setMemos(prev => [...reversed, ...prev]);
-        [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
-        setTimeout(() => { anchorRef.current = null; }, 800);
       } else {
         setMemos(reversed);
         // Stay pinned to the bottom until the user actually scrolls. A
@@ -850,11 +929,42 @@ export default function WidgetPage() {
 
   useEffect(() => { loadMemosRef.current = loadMemos; }, [loadMemos]);
 
+  // Fetch the full archived set (all pages) for the 보관 group.
+  const loadArchived = useCallback(async () => {
+    if (!cfg?.token || !cfg.archivedProp) { setArchivedAll([]); return; }
+    try {
+      const q = new URLSearchParams({
+        token: cfg.token, databaseId: cfg.databaseId,
+        archivedProp: cfg.archivedProp, archivedOnly: "1",
+        ...(cfg.folderProp ? { folderProp: cfg.folderProp } : {}),
+        ...(cfg.pinnedProp ? { pinnedProp: cfg.pinnedProp } : {}),
+        ...(cfg.importantProp ? { importantProp: cfg.importantProp } : {}),
+        ...(cfg.replyProp ? { replyProp: cfg.replyProp } : {}),
+      });
+      const r = await fetch(`/api/notion/memos?${q}`);
+      const d = await r.json();
+      setArchivedAll([...(d.memos ?? [])].reverse());
+    } catch { /* keep whatever we have */ }
+  }, [cfg]);
+
   useEffect(() => {
     if (!cfgLoaded) return;
     if (!cfg?.token) { router.replace("/onboarding"); return; }
     loadMemos();
-  }, [cfgLoaded, cfg, loadMemos, router]);
+    loadArchived();
+  }, [cfgLoaded, cfg, loadMemos, loadArchived, router]);
+
+  // After the first page renders, keep chaining the next page in the background
+  // until everything is loaded — so the full history ends up available without
+  // the user having to scroll up. Each load waits for the previous one (gated by
+  // `loading`); the effect re-fires when `nextCursor` advances. A small delay
+  // keeps it gentle on the Notion API. The view stays bottom-pinned (or, once the
+  // reader scrolls, anchored) so this never yanks the scroll position around.
+  useEffect(() => {
+    if (!cfgLoaded || loading || !hasMore || !nextCursor) return;
+    const t = setTimeout(() => loadMemosRef.current(nextCursor), 250);
+    return () => clearTimeout(t);
+  }, [memos, loading, hasMore, nextCursor, cfgLoaded]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
@@ -1020,6 +1130,26 @@ export default function WidgetPage() {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: cfg.token, pinnedProp: cfg.pinnedProp, importantProp: cfg.importantProp, archivedProp: cfg.archivedProp, folderProp: cfg.folderProp, replyProp: cfg.replyProp, ...patch }),
     });
+  }
+
+  // Toggle a memo's archive flag. Persists the checkbox to Notion (via
+  // updateMemo) and keeps the dedicated archived list in sync so the memo moves
+  // between the normal views and the 전체 tab's 보관 group immediately.
+  function toggleArchive(memo: Memo) {
+    const next = !memo.archived;
+    setArchivedAll(prev => next
+      ? (prev.some(m => m.id === memo.id) ? prev : [...prev, { ...memo, archived: true }])
+      : prev.filter(m => m.id !== memo.id));
+    updateMemo(memo.id, { archived: next });
+  }
+
+  // Archive a memo by id (used when dragging a memo onto the 보관 sidebar tab).
+  function archiveMemo(id: string) {
+    const memo = memos.find(m => m.id === id);
+    setArchivedAll(prev => prev.some(m => m.id === id)
+      ? prev
+      : memo ? [...prev, { ...memo, archived: true }] : prev);
+    updateMemo(id, { archived: true });
   }
 
   async function deleteMemo(id: string) {
@@ -1232,6 +1362,7 @@ export default function WidgetPage() {
   const filteredMemos = activeFolder === "ALL" || activeFolder === "전체" ? visibleMemos
     : activeFolder === "고정" ? visibleMemos.filter(m => m.pinned)
     : activeFolder === "중요" ? visibleMemos.filter(m => m.important)
+    : activeFolder === ARCHIVE_GROUP ? archivedAll
     : visibleMemos.filter(m => effectiveFolder(m) === activeFolder);
 
   const folderColor = (f: string): string | undefined => {
@@ -1247,13 +1378,20 @@ export default function WidgetPage() {
     return i >= 0 ? (cfg.folderBubblePalette[i] || undefined) : undefined;
   };
 
-  const sidebarItems: Array<{ type: "folder"|"pinned"|"important"|"empty"; label?: string; color?: string }> = [];
-  folderList.forEach((f, i) => {
-    sidebarItems.push({ type: "folder", label: f, color: cfg?.folderColorPalette?.[i] ?? "var(--accent)" });
-    if (i === 0) sidebarItems.push({ type: "pinned" });
-    else if (i === 1) sidebarItems.push({ type: "important" });
-    else sidebarItems.push({ type: "empty" });
-  });
+  // 2-column sidebar grid: folders flow down the left column, the special tabs
+  // (고정/중요/보관) sit in the right column's first three rows — regardless of
+  // how many folders there are, so 보관 always appears under 중요.
+  const sidebarItems: Array<{ type: "folder"|"pinned"|"important"|"archive"|"empty"; label?: string; color?: string }> = [];
+  const specialItems: Array<{ type: "pinned"|"important"|"archive" }> = [
+    { type: "pinned" }, { type: "important" }, { type: "archive" },
+  ];
+  const sidebarRows = Math.max(folderList.length, specialItems.length);
+  for (let r = 0; r < sidebarRows; r++) {
+    sidebarItems.push(r < folderList.length
+      ? { type: "folder", label: folderList[r], color: cfg?.folderColorPalette?.[r] ?? "var(--accent)" }
+      : { type: "empty" });
+    sidebarItems.push(r < specialItems.length ? specialItems[r] : { type: "empty" });
+  }
 
   const replyingMemo = replyingTo ? memos.find(m => m.id === replyingTo) : null;
 
@@ -1263,15 +1401,14 @@ export default function WidgetPage() {
     if (activeFolder !== "전체" || folderList.length === 0) return null;
     const groups = new Map<string, Memo[]>();
     for (const f of folderList) groups.set(f, []);
-    const archivedMemos: Memo[] = [];
     for (const m of memos) {
-      if (m.archived) { archivedMemos.push(m); continue; }
+      if (m.archived) continue; // archived live in their own group below
       const f = m.folder || defaultFolder;
       if (groups.has(f)) groups.get(f)!.push(m);
       else groups.set(f, [m]);
     }
-    // 보관함은 항상 마지막 항목으로. 전체 탭에서만 노출된다.
-    if (archivedMemos.length > 0) groups.set(ARCHIVE_GROUP, archivedMemos);
+    // 보관함은 비어 있어도 항상 마지막 항목으로 노출 (전체 탭 한정).
+    groups.set(ARCHIVE_GROUP, archivedAll);
     return groups;
   })();
 
@@ -1291,7 +1428,7 @@ export default function WidgetPage() {
         mobile={mobile}
         onPin={() => updateMemo(memo.id, { pinned: !memo.pinned })}
         onImportant={() => updateMemo(memo.id, { important: !memo.important })}
-        onArchive={() => updateMemo(memo.id, { archived: !memo.archived })}
+        onArchive={() => toggleArchive(memo)}
         onDelete={() => deleteMemo(memo.id)}
         onToggle={(tid, checked) => toggleTodo(tid, checked, memo.id)}
         onEdit={(content) => editMemo(memo.id, content)}
@@ -1400,22 +1537,25 @@ export default function WidgetPage() {
             }}>
               {sidebarItems.map((item, i) => {
                 if (item.type === "empty") return <div key={i} />;
-                const isSpecial = item.type === "pinned" || item.type === "important";
-                const label = item.type === "pinned" ? "고정" : item.type === "important" ? "중요" : item.label!;
-                const color = isSpecial ? "var(--accent)" : item.color!;
+                const isSpecial = item.type === "pinned" || item.type === "important" || item.type === "archive";
+                const isArchive = item.type === "archive";
+                const isDroppable = item.type === "folder" || isArchive;
+                const label = item.type === "pinned" ? "고정" : item.type === "important" ? "중요" : isArchive ? "보관" : item.label!;
+                const color = item.type === "pinned" || item.type === "important" || isArchive ? "var(--accent)"
+                  : item.color!;
                 const isActive = activeFolder === label;
-                const isDragOver = !isSpecial && dragOverFolder === label;
+                const isDragOver = isDroppable && dragOverFolder === label;
                 return (
                   <div key={i} className="y2k-folder-btn"
                     onClick={() => setFolder(label)}
-                    onDragOver={isSpecial ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolder(label); }}
-                    onDragLeave={isSpecial ? undefined : () => setDragOverFolder(null)}
-                    onDrop={isSpecial ? undefined : e => {
+                    onDragOver={isDroppable ? e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolder(label); } : undefined}
+                    onDragLeave={isDroppable ? () => setDragOverFolder(null) : undefined}
+                    onDrop={isDroppable ? e => {
                       e.preventDefault();
                       const memoId = e.dataTransfer.getData("text/plain");
-                      if (memoId) updateMemo(memoId, { folder: label });
+                      if (memoId) { if (isArchive) archiveMemo(memoId); else updateMemo(memoId, { folder: label }); }
                       setDragOverFolder(null);
-                    }}
+                    } : undefined}
                     style={{
                       display:"flex", flexDirection:"column", alignItems:"center", gap:1,
                       padding:"3px 4px", borderRadius:4, cursor:"pointer",

@@ -203,6 +203,51 @@ export function lineToBlock(line: string) {
   };
 }
 
+type PageProps = Record<string, {
+  type: string; select?: { name: string }; checkbox?: boolean; rich_text?: RT[];
+  files?: Array<{ type: string; file?: { url: string }; external?: { url: string } }>;
+}>;
+
+interface MapOpts { folderProp: string | null; pinnedProp: string | null; importantProp: string | null; archivedProp: string | null; replyProp: string | null }
+
+// Turn a page of Notion query results into the memo shape the widget consumes.
+async function mapPages(token: string, results: Record<string, unknown>[], o: MapOpts) {
+  return Promise.all(
+    results.map(async (page: Record<string, unknown>) => {
+      const props = page.properties as PageProps;
+      const rawBlocks: NotionBlock[] = await fetchBlockTree(token, page.id as string, 0);
+
+      const folder = o.folderProp && props[o.folderProp]?.select?.name ? props[o.folderProp].select!.name : "";
+      const pinned = o.pinnedProp ? (props[o.pinnedProp]?.checkbox ?? false) : false;
+      const important = o.importantProp ? (props[o.importantProp]?.checkbox ?? false) : false;
+      const archived = o.archivedProp ? (props[o.archivedProp]?.checkbox ?? false) : false;
+      const replyStr = o.replyProp ? (props[o.replyProp]?.rich_text ?? []).map((r: RT) => r.plain_text).join("") : "";
+      const replies = replyStr ? replyStr.split("|||").filter(Boolean) : [];
+
+      // Pull images both from image blocks in the page body AND from any
+      // "files" property on the page (e.g. an "이미지"/"첨부" column).
+      const propFileUrls: string[] = [];
+      for (const v of Object.values(props)) {
+        if (v?.type === "files" && Array.isArray(v.files)) {
+          for (const f of v.files) {
+            const url = f.type === "external" ? f.external?.url : f.file?.url;
+            if (url && /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?|$)/i.test(url)) propFileUrls.push(url);
+          }
+        }
+      }
+
+      return {
+        id: page.id,
+        content: parseBlocksToContent(rawBlocks),
+        todos: parseBlocksToTodos(rawBlocks),
+        imageUrls: [...parseBlocksToImageUrls(rawBlocks), ...propFileUrls],
+        createdAt: parseDate(page.created_time as string),
+        replies, pinned, important, archived, folder,
+      };
+    })
+  );
+}
+
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
   const token = p.get("token")!;
@@ -213,58 +258,47 @@ export async function GET(req: NextRequest) {
   const importantProp = p.get("importantProp") ?? null;
   const archivedProp = p.get("archivedProp") ?? null;
   const replyProp = p.get("replyProp") ?? null;
+  const archivedOnly = p.get("archivedOnly");
+  const opts: MapOpts = { folderProp, pinnedProp, importantProp, archivedProp, replyProp };
+  const queryUrl = `https://api.notion.com/v1/databases/${databaseId}/query`;
 
   try {
+    // Archived view: pull EVERY archived memo (across all pages) so the 전체
+    // tab's 보관 group always shows the complete set, not just whatever fell
+    // inside the main feed's pagination window.
+    if (archivedOnly && archivedProp) {
+      const all: Awaited<ReturnType<typeof mapPages>> = [];
+      let next: string | undefined = undefined;
+      for (let guard = 0; guard < 15; guard++) {
+        const body: Record<string, unknown> = {
+          page_size: 100,
+          sorts: [{ timestamp: "created_time", direction: "descending" }],
+          filter: { property: archivedProp, checkbox: { equals: true } },
+        };
+        if (next) body.start_cursor = next;
+        const res = await fetch(queryUrl, { method: "POST", headers: hdrs(token), body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!res.ok) return NextResponse.json({ error: data.message }, { status: res.status });
+        all.push(...await mapPages(token, data.results, opts));
+        if (!data.has_more) break;
+        next = data.next_cursor;
+      }
+      return NextResponse.json({ memos: all, nextCursor: null, hasMore: false });
+    }
+
     const body: Record<string, unknown> = {
       page_size: 20,
       sorts: [{ timestamp: "created_time", direction: "descending" }],
     };
     if (cursor) body.start_cursor = cursor;
 
-    const res = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+    const res = await fetch(queryUrl, {
       method: "POST", headers: hdrs(token), body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) return NextResponse.json({ error: data.message }, { status: res.status });
 
-    const memos = await Promise.all(
-      data.results.map(async (page: Record<string, unknown>) => {
-        const props = page.properties as Record<string, {
-          type: string; select?: { name: string }; checkbox?: boolean; rich_text?: RT[];
-          files?: Array<{ type: string; file?: { url: string }; external?: { url: string } }>;
-        }>;
-
-        const rawBlocks: NotionBlock[] = await fetchBlockTree(token, page.id as string, 0);
-
-        const folder = folderProp && props[folderProp]?.select?.name ? props[folderProp].select!.name : "";
-        const pinned = pinnedProp ? (props[pinnedProp]?.checkbox ?? false) : false;
-        const important = importantProp ? (props[importantProp]?.checkbox ?? false) : false;
-        const archived = archivedProp ? (props[archivedProp]?.checkbox ?? false) : false;
-        const replyStr = replyProp ? (props[replyProp]?.rich_text ?? []).map((r: RT) => r.plain_text).join("") : "";
-        const replies = replyStr ? replyStr.split("|||").filter(Boolean) : [];
-
-        // Pull images both from image blocks in the page body AND from any
-        // "files" property on the page (e.g. an "이미지"/"첨부" column).
-        const propFileUrls: string[] = [];
-        for (const v of Object.values(props)) {
-          if (v?.type === "files" && Array.isArray(v.files)) {
-            for (const f of v.files) {
-              const url = f.type === "external" ? f.external?.url : f.file?.url;
-              if (url && /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?|$)/i.test(url)) propFileUrls.push(url);
-            }
-          }
-        }
-
-        return {
-          id: page.id,
-          content: parseBlocksToContent(rawBlocks),
-          todos: parseBlocksToTodos(rawBlocks),
-          imageUrls: [...parseBlocksToImageUrls(rawBlocks), ...propFileUrls],
-          createdAt: parseDate(page.created_time as string),
-          replies, pinned, important, archived, folder,
-        };
-      })
-    );
+    const memos = await mapPages(token, data.results, opts);
 
     return NextResponse.json({ memos, nextCursor: data.next_cursor ?? null, hasMore: data.has_more });
   } catch {
