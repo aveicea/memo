@@ -70,7 +70,7 @@ function buildCssVars(cfg: Config): string {
       --reply-text-color: ${repText};
       --widget-font-family: ${font};
     }
-    @keyframes y2kFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes y2kFadeIn { from { opacity:0; } to { opacity:1; } }
     @keyframes spin { to { transform:rotate(360deg); } }
     @keyframes dotBounce { 0%,80%,100% { transform:scale(0.6); opacity:0.4; } 40% { transform:scale(1); opacity:1; } }
   `;
@@ -755,9 +755,11 @@ export default function WidgetPage() {
   // When older memos are prepended at the top, we keep the memo the reader was
   // looking at stationary by anchoring on its DOM element (id + viewport offset).
   const anchorRef = useRef<{ id: string; offset: number } | null>(null);
-  // Topmost visible memo, tracked on scroll, so toggling the sidebar (which
-  // reflows the list width) can keep that memo in view instead of jumping up.
-  const topAnchorRef = useRef<{ id: string; offset: number } | null>(null);
+  // The memo nearest the viewport center, tracked on scroll, so toggling the
+  // sidebar (which animates the list width over ~0.25s) can keep that memo
+  // centered instead of jumping.
+  const centerAnchorRef = useRef<{ id: string; offset: number } | null>(null);
+  const restoringRef = useRef(false);
   const prevSidebarRef = useRef(true);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
@@ -1048,17 +1050,19 @@ export default function WidgetPage() {
     return () => ro.disconnect();
   }, [cfgLoaded]);
 
-  // Remember which memo sits at the top of the viewport as the reader scrolls.
+  // Remember which memo sits at the viewport center as the reader scrolls.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const record = () => {
-      const cTop = el.getBoundingClientRect().top;
+      if (restoringRef.current || initialScrollRef.current) return;
+      const cRect = el.getBoundingClientRect();
+      const mid = cRect.top + cRect.height / 2;
       const items = el.querySelectorAll<HTMLElement>("[data-guestbook-entry-id]");
       for (const it of items) {
         const r = it.getBoundingClientRect();
-        if (r.bottom > cTop + 1) {
-          topAnchorRef.current = { id: it.getAttribute("data-guestbook-entry-id")!, offset: r.top - cTop };
+        if (r.bottom >= mid) {
+          centerAnchorRef.current = { id: it.getAttribute("data-guestbook-entry-id")!, offset: r.top - cRect.top };
           return;
         }
       }
@@ -1068,18 +1072,36 @@ export default function WidgetPage() {
     return () => el.removeEventListener("scroll", record);
   }, [cfgLoaded]);
 
-  // When the sidebar opens/closes the list reflows; keep the memo the reader was
-  // looking at pinned in place (before paint) instead of letting it jump.
+  // When the sidebar opens/closes the list width animates and reflows; keep the
+  // memo the reader was centered on pinned through the whole transition.
   useLayoutEffect(() => {
     if (prevSidebarRef.current === showSidebar) return;
     prevSidebarRef.current = showSidebar;
-    const a = topAnchorRef.current;
     const el = scrollRef.current;
-    if (!a || !el) return;
-    const target = el.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
-    if (!target) return;
-    const newOffset = target.getBoundingClientRect().top - el.getBoundingClientRect().top;
-    el.scrollTop += newOffset - a.offset;
+    if (!el) return;
+    // Pinned to the bottom (reader hasn't scrolled) → hold the bottom; otherwise
+    // hold the memo that was centered. Re-apply across the width transition.
+    const bottomPin = initialScrollRef.current;
+    const a = bottomPin ? null : centerAnchorRef.current;
+    if (!a && !bottomPin) return;
+    restoringRef.current = true;
+    const startT = performance.now();
+    let raf = 0;
+    const tick = () => {
+      if (bottomPin) {
+        el.scrollTop = el.scrollHeight;
+      } else if (a) {
+        const target = el.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
+        if (target) {
+          const delta = (target.getBoundingClientRect().top - el.getBoundingClientRect().top) - a.offset;
+          if (delta !== 0) el.scrollTop += delta;
+        }
+      }
+      if (performance.now() - startT < 340) raf = requestAnimationFrame(tick);
+      else restoringRef.current = false;
+    };
+    tick();
+    return () => { cancelAnimationFrame(raf); restoringRef.current = false; };
   }, [showSidebar]);
 
   // On mobile, fit the widget to the visible viewport (above the keyboard) and
