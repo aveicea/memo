@@ -733,7 +733,10 @@ export default function WidgetPage() {
   const [archivedAll, setArchivedAll] = useState<Memo[]>([]);
   const [loading, setLoading]       = useState(false);
   const [activeFolder, setFolder]   = useState("ALL");
-  const [showSidebar, setShowSidebar] = useState(true);
+  // Start closed to match the default "ALL" tab's steady state — otherwise the
+  // sidebar opens then auto-closes on load, reflowing the list and bouncing the
+  // last bubble.
+  const [showSidebar, setShowSidebar] = useState(false);
   const [minimized, setMinimized]   = useState(false);
   const [inputText, setInputText]   = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -760,7 +763,7 @@ export default function WidgetPage() {
   // centered instead of jumping.
   const centerAnchorRef = useRef<{ id: string; offset: number } | null>(null);
   const restoringRef = useRef(false);
-  const prevSidebarRef = useRef(true);
+  const prevSidebarRef = useRef(false);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
   // Live set of loaded memo ids (for dedupe without stale closures), and a flag
