@@ -947,17 +947,11 @@ export default function WidgetPage() {
           const added = reversed.filter(m => !prevIds.has(m.id));
           return [...refreshed, ...added];
         });
-        // Stay pinned to the bottom until the user actually scrolls. A
-        // ResizeObserver/image-load listener (see effect below) re-pins
-        // whenever content grows — no arbitrary time window, so late-loading
-        // images on slow mobile networks can't push the latest memo offscreen.
+        // Pin to the bottom: the synchronous layout effect (below) does it before
+        // paint on every list change, and a ResizeObserver re-pins as late images
+        // /fonts grow the content — so no stepped setTimeout pins that visibly
+        // bounce the last bubble up and down while things settle.
         initialScrollRef.current = true;
-        [0, 80, 200, 400, 700].forEach(t =>
-          setTimeout(() => {
-            if (initialScrollRef.current && scrollRef.current)
-              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-          }, t)
-        );
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
