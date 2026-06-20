@@ -763,6 +763,11 @@ export default function WidgetPage() {
   const prevSidebarRef = useRef(true);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
+  // Live set of loaded memo ids (for dedupe without stale closures), and a flag
+  // that stops the background chain-load once a page brings nothing new (e.g. the
+  // cache already had everything) so we don't pointlessly re-crawl every page.
+  const memoIdsRef = useRef<Set<string>>(new Set());
+  const chainStopRef = useRef(false);
 
   // Paint last session's memos instantly from cache, so the feed isn't blank
   // while the fresh data loads in the background (see the load effects below).
@@ -903,34 +908,45 @@ export default function WidgetPage() {
       });
       const r = await fetch(`/api/notion/memos?${q}`);
       const d = await r.json();
-      const reversed = [...(d.memos ?? [])].reverse();
+      const reversed: Memo[] = [...(d.memos ?? [])].reverse();
       if (cursor) {
-        // Anchor on the memo currently at the top of the list so it stays put
-        // when older memos are inserted above it. The actual scroll correction
-        // happens synchronously in a layout effect (before paint), with extra
-        // passes scheduled below to absorb late image/font height changes.
-        // Skip anchoring while still bottom-pinned (auto-fill below) — there we
-        // want the view to stay at the bottom on the most recent memo.
-        const scrollEl = scrollRef.current;
-        const anchorEl = initialScrollRef.current ? null : (scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null);
-        if (scrollEl && anchorEl) {
-          anchorRef.current = {
-            id: anchorEl.getAttribute("data-guestbook-entry-id")!,
-            offset: anchorEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top,
-          };
-          [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
-          setTimeout(() => { anchorRef.current = null; }, 800);
+        // Only the memos we don't already have (cache / earlier fetch) are new.
+        const fresh = reversed.filter((m: Memo) => !memoIdsRef.current.has(m.id));
+        if (fresh.length === 0) {
+          // This whole page was already loaded — the cache is up to date here, so
+          // stop the background chain instead of re-crawling the rest.
+          chainStopRef.current = true;
+        } else {
+          // Anchor on the memo currently at the top so it stays put when older
+          // memos are inserted above it (corrected synchronously in a layout
+          // effect, with extra passes for late image/font height changes).
+          // Skip anchoring while still bottom-pinned (auto-fill) — keep the view
+          // pinned to the most recent memo there.
+          const scrollEl = scrollRef.current;
+          const anchorEl = initialScrollRef.current ? null : (scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null);
+          if (scrollEl && anchorEl) {
+            anchorRef.current = {
+              id: anchorEl.getAttribute("data-guestbook-entry-id")!,
+              offset: anchorEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top,
+            };
+            [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
+            setTimeout(() => { anchorRef.current = null; }, 800);
+          }
+          setMemos(prev => [...fresh, ...prev]);
         }
-        // Dedupe by id: overlapping pages (e.g. a reload restarting the
-        // background chain while a previous fetch is still in flight) must not
-        // insert the same memo twice.
-        setMemos(prev => {
-          const seen = new Set(prev.map(m => m.id));
-          const fresh = reversed.filter((m: Memo) => !seen.has(m.id));
-          return fresh.length ? [...fresh, ...prev] : prev;
-        });
       } else {
-        setMemos(reversed);
+        // First/refresh load. If we already have memos (from cache), MERGE rather
+        // than replace — refresh the ones we have and append genuinely-new (newer)
+        // memos — so the list never collapses to one page and re-grows.
+        chainStopRef.current = false;
+        setMemos(prev => {
+          if (prev.length === 0) return reversed;
+          const incoming = new Map(reversed.map(m => [m.id, m] as const));
+          const prevIds = new Set(prev.map(m => m.id));
+          const refreshed = prev.map(m => incoming.get(m.id) ?? m);
+          const added = reversed.filter(m => !prevIds.has(m.id));
+          return [...refreshed, ...added];
+        });
         // Stay pinned to the bottom until the user actually scrolls. A
         // ResizeObserver/image-load listener (see effect below) re-pins
         // whenever content grows — no arbitrary time window, so late-loading
@@ -993,10 +1009,13 @@ export default function WidgetPage() {
   // keeps it gentle on the Notion API. The view stays bottom-pinned (or, once the
   // reader scrolls, anchored) so this never yanks the scroll position around.
   useEffect(() => {
-    if (!cfgLoaded || loading || !hasMore || !nextCursor) return;
+    if (!cfgLoaded || loading || !hasMore || !nextCursor || chainStopRef.current) return;
     const t = setTimeout(() => loadMemosRef.current(nextCursor), 250);
     return () => clearTimeout(t);
   }, [memos, loading, hasMore, nextCursor, cfgLoaded]);
+
+  // Keep the dedupe id-set in sync with the loaded memos.
+  useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
