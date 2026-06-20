@@ -733,10 +733,7 @@ export default function WidgetPage() {
   const [archivedAll, setArchivedAll] = useState<Memo[]>([]);
   const [loading, setLoading]       = useState(false);
   const [activeFolder, setFolder]   = useState("ALL");
-  // Start closed to match the default "ALL" tab's steady state — otherwise the
-  // sidebar opens then auto-closes on load, reflowing the list and bouncing the
-  // last bubble.
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [minimized, setMinimized]   = useState(false);
   const [inputText, setInputText]   = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -752,6 +749,10 @@ export default function WidgetPage() {
   // When the memo list gets too narrow (small window / sidebar open), drop the
   // action-button text labels and show icon-only so they don't wrap to 2 lines.
   const [compactActions, setCompactActions] = useState(false);
+  // Keep the list invisible until the initial layout settles (fonts loaded,
+  // sidebar auto-toggle done) so the reader never sees the first-load reflow /
+  // bottom-pin bounce — we just fade it in already pinned to the bottom.
+  const [listReady, setListReady] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
@@ -763,7 +764,7 @@ export default function WidgetPage() {
   // centered instead of jumping.
   const centerAnchorRef = useRef<{ id: string; offset: number } | null>(null);
   const restoringRef = useRef(false);
-  const prevSidebarRef = useRef(false);
+  const prevSidebarRef = useRef(true);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
   // Live set of loaded memo ids (for dedupe without stale closures), and a flag
@@ -1021,6 +1022,19 @@ export default function WidgetPage() {
 
   // Keep the dedupe id-set in sync with the loaded memos.
   useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
+
+  // Reveal the list only once the first-load reflow has settled (fonts ready +
+  // a short settle for the sidebar auto-toggle), hard-capped so it always shows.
+  useEffect(() => {
+    if (!cfgLoaded || listReady) return;
+    let cancelled = false;
+    const reveal = () => { if (!cancelled) requestAnimationFrame(() => setListReady(true)); };
+    const fonts = (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready ?? Promise.resolve();
+    const settle = new Promise<void>(r => setTimeout(r, 380));
+    Promise.all([fonts, settle]).then(reveal);
+    const cap = setTimeout(reveal, 900);
+    return () => { cancelled = true; clearTimeout(cap); };
+  }, [cfgLoaded, listReady]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
@@ -1729,7 +1743,8 @@ export default function WidgetPage() {
 
           {/* Memo list */}
           <div ref={scrollRef} className="y2k-scroll"
-            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px" }}>
+            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px",
+              opacity: listReady ? 1 : 0, transition: "opacity 0.18s ease" }}>
 
             {loading && memos.length === 0 && (
               <div style={{ padding:40, textAlign:"center", color:"var(--accent)", fontSize:13 }}>
