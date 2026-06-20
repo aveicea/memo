@@ -947,11 +947,19 @@ export default function WidgetPage() {
           const added = reversed.filter(m => !prevIds.has(m.id));
           return [...refreshed, ...added];
         });
-        // Pin to the bottom: the synchronous layout effect (below) does it before
-        // paint on every list change, and a ResizeObserver re-pins as late images
-        // /fonts grow the content — so no stepped setTimeout pins that visibly
-        // bounce the last bubble up and down while things settle.
+        // Pin to the bottom and HOLD it for a short window via a per-frame loop.
+        // Late font/image reflows change the content height a frame or two after
+        // render; a ResizeObserver corrects this only on the *next* frame, so the
+        // last bubble visibly floats up then snaps down. Re-pinning every frame
+        // closes that gap. Stops early once the reader scrolls (see cancelInitial).
         initialScrollRef.current = true;
+        const pinStart = performance.now();
+        const pinLoop = () => {
+          if (!initialScrollRef.current) return;
+          if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          if (performance.now() - pinStart < 1500) requestAnimationFrame(pinLoop);
+        };
+        requestAnimationFrame(pinLoop);
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
