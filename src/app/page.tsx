@@ -1025,19 +1025,33 @@ export default function WidgetPage() {
   // Keep the dedupe id-set in sync with the loaded memos.
   useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
 
-  // Reveal the list only once the FIRST data load has actually rendered, fonts
-  // are ready, and a short settle has passed (sidebar auto-toggle) — so the
-  // reader never sees the data arriving or the layout reflowing. Hard-capped.
+  // Reveal the list only once it has STOPPED reflowing — wait for the first data
+  // to render and the scroll height to hold steady for a beat (covers late font
+  // swaps / image loads / the sidebar auto-toggle). Hard-capped so it always shows.
   useEffect(() => {
     if (!cfgLoaded || listReady) return;
-    if (!firstLoadDone && !!cfg?.token) return; // wait for the first fetch to render
-    let cancelled = false;
-    const reveal = () => { if (!cancelled) requestAnimationFrame(() => setListReady(true)); };
-    const fonts = (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready ?? Promise.resolve();
-    const settle = new Promise<void>(r => setTimeout(r, 200));
-    Promise.all([fonts, settle]).then(reveal);
-    const cap = setTimeout(reveal, 1200);
-    return () => { cancelled = true; clearTimeout(cap); };
+    let cancelled = false, raf = 0, stableTimer: ReturnType<typeof setTimeout> | undefined, lastH = -1;
+    const reveal = () => { if (!cancelled) { cancelled = true; setListReady(true); } };
+    const cap = setTimeout(reveal, 2500); // always reveal eventually, even on error
+    // Once the first data has rendered, watch the scroll height and reveal only
+    // after it holds steady for a beat (late font swaps / image loads settled).
+    if (firstLoadDone || !cfg?.token) {
+      const start = performance.now();
+      const loop = () => {
+        if (cancelled) return;
+        const h = scrollRef.current?.scrollHeight ?? 0;
+        if (h !== lastH) {
+          lastH = h;
+          clearTimeout(stableTimer);
+          stableTimer = setTimeout(reveal, 220);
+        }
+        if (performance.now() - start < 2400) raf = requestAnimationFrame(loop);
+      };
+      ((document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready ?? Promise.resolve())
+        .then(() => { lastH = -1; });
+      raf = requestAnimationFrame(loop);
+    }
+    return () => { cancelled = true; cancelAnimationFrame(raf); clearTimeout(stableTimer); clearTimeout(cap); };
   }, [cfgLoaded, listReady, firstLoadDone, cfg?.token]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
