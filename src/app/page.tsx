@@ -1116,17 +1116,21 @@ export default function WidgetPage() {
     return () => { cancelAnimationFrame(raf); restoringRef.current = false; };
   }, [showSidebar]);
 
-  // On mobile, fit the widget to the visible viewport (above the keyboard) and
-  // keep scroll pinned to the bottom when the keyboard opens/closes.
+  // On mobile, only shrink the widget to the visible viewport WHEN THE KEYBOARD
+  // IS OPEN. Otherwise leave height at 100dvh and let the browser handle the URL
+  // bar — tracking every visualViewport change here made the widget (and the last
+  // bubble) bounce as the browser chrome settled on load.
   useEffect(() => {
     if (!mobile) return;
     const vv = window.visualViewport;
     const handler = () => {
-      if (vv) setViewportH(vv.height);
-      // Pin the page to the top so the shrunken widget aligns with the viewport
-      // (no white band above), then keep the latest memo in view.
-      window.scrollTo(0, 0);
-      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
+      if (!vv) return;
+      const keyboardOpen = window.innerHeight - vv.height > 120;
+      setViewportH(keyboardOpen ? vv.height : null);
+      if (keyboardOpen) {
+        window.scrollTo(0, 0);
+        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
+      }
     };
     handler();
     vv?.addEventListener("resize", handler);
