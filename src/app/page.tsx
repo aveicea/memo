@@ -749,10 +749,11 @@ export default function WidgetPage() {
   // When the memo list gets too narrow (small window / sidebar open), drop the
   // action-button text labels and show icon-only so they don't wrap to 2 lines.
   const [compactActions, setCompactActions] = useState(false);
-  // Keep the list invisible until the initial layout settles (fonts loaded,
-  // sidebar auto-toggle done) so the reader never sees the first-load reflow /
-  // bottom-pin bounce — we just fade it in already pinned to the bottom.
+  // Keep the list invisible until the initial layout settles (first data loaded,
+  // fonts ready, sidebar auto-toggle done) so the reader never sees the first-load
+  // reflow / bottom-pin bounce — we just fade it in already pinned to the bottom.
   const [listReady, setListReady] = useState(false);
+  const [firstLoadDone, setFirstLoadDone] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
@@ -964,6 +965,7 @@ export default function WidgetPage() {
           if (performance.now() - pinStart < 1500) requestAnimationFrame(pinLoop);
         };
         requestAnimationFrame(pinLoop);
+        setFirstLoadDone(true);
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
@@ -1023,18 +1025,20 @@ export default function WidgetPage() {
   // Keep the dedupe id-set in sync with the loaded memos.
   useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
 
-  // Reveal the list only once the first-load reflow has settled (fonts ready +
-  // a short settle for the sidebar auto-toggle), hard-capped so it always shows.
+  // Reveal the list only once the FIRST data load has actually rendered, fonts
+  // are ready, and a short settle has passed (sidebar auto-toggle) — so the
+  // reader never sees the data arriving or the layout reflowing. Hard-capped.
   useEffect(() => {
     if (!cfgLoaded || listReady) return;
+    if (!firstLoadDone && !!cfg?.token) return; // wait for the first fetch to render
     let cancelled = false;
     const reveal = () => { if (!cancelled) requestAnimationFrame(() => setListReady(true)); };
     const fonts = (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready ?? Promise.resolve();
-    const settle = new Promise<void>(r => setTimeout(r, 380));
+    const settle = new Promise<void>(r => setTimeout(r, 200));
     Promise.all([fonts, settle]).then(reveal);
-    const cap = setTimeout(reveal, 900);
+    const cap = setTimeout(reveal, 1200);
     return () => { cancelled = true; clearTimeout(cap); };
-  }, [cfgLoaded, listReady]);
+  }, [cfgLoaded, listReady, firstLoadDone, cfg?.token]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
