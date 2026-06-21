@@ -749,6 +749,9 @@ export default function WidgetPage() {
   // When the memo list gets too narrow (small window / sidebar open), drop the
   // action-button text labels and show icon-only so they don't wrap to 2 lines.
   const [compactActions, setCompactActions] = useState(false);
+  // Hide the list until the first bottom-pin lands so the initial top→bottom
+  // scroll jump isn't visible (revealed within a frame, not a real delay).
+  const [shown, setShown] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
@@ -965,8 +968,18 @@ export default function WidgetPage() {
     if (anchorRef.current) restoreAnchor();
     else if (initialScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // Reveal only after the first bottom-pin so the reader never sees the list
+      // render at the top and then jump down.
+      if (!shown) requestAnimationFrame(() => setShown(true));
     }
-  }, [memos, restoreAnchor]);
+  }, [memos, restoreAnchor, shown]);
+
+  // Safety net: never leave the list hidden (e.g. no memos / empty state).
+  useEffect(() => {
+    if (shown || !cfgLoaded) return;
+    const t = setTimeout(() => setShown(true), 600);
+    return () => clearTimeout(t);
+  }, [shown, cfgLoaded]);
 
   useEffect(() => { loadMemosRef.current = loadMemos; }, [loadMemos]);
 
@@ -1721,7 +1734,8 @@ export default function WidgetPage() {
 
           {/* Memo list */}
           <div ref={scrollRef} className="y2k-scroll"
-            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px" }}>
+            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px",
+              opacity: shown ? 1 : 0, transition: "opacity 0.12s ease" }}>
 
             {loading && memos.length === 0 && (
               <div style={{ padding:40, textAlign:"center", color:"var(--accent)", fontSize:13 }}>
