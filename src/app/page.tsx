@@ -70,7 +70,7 @@ function buildCssVars(cfg: Config): string {
       --reply-text-color: ${repText};
       --widget-font-family: ${font};
     }
-    @keyframes y2kFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes y2kFadeIn { from { opacity:0; } to { opacity:1; } }
     @keyframes spin { to { transform:rotate(360deg); } }
     @keyframes dotBounce { 0%,80%,100% { transform:scale(0.6); opacity:0.4; } 40% { transform:scale(1); opacity:1; } }
   `;
@@ -749,25 +749,47 @@ export default function WidgetPage() {
   // When the memo list gets too narrow (small window / sidebar open), drop the
   // action-button text labels and show icon-only so they don't wrap to 2 lines.
   const [compactActions, setCompactActions] = useState(false);
+  // Gate the first data load until the archive property has been resolved
+  // (present in config, or back-filled / confirmed absent) — so the feed loads
+  // exactly once instead of reloading after the back-fill.
+  const [archiveResolved, setArchiveResolved] = useState(false);
+  // Mobile: the formatting toolbar only shows while the input is focused.
+  const [inputFocused, setInputFocused] = useState(false);
+  // True once the reader scrolls away from the initial bottom-pin. The bottom
+  // "loading more" spinner only shows after this — during the initial bottom-
+  // pinned load it would pop in/out (~18px) and bounce the last bubble.
+  const [userScrolled, setUserScrolled] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
   // When older memos are prepended at the top, we keep the memo the reader was
   // looking at stationary by anchoring on its DOM element (id + viewport offset).
   const anchorRef = useRef<{ id: string; offset: number } | null>(null);
-  // Topmost visible memo, tracked on scroll, so toggling the sidebar (which
-  // reflows the list width) can keep that memo in view instead of jumping up.
-  const topAnchorRef = useRef<{ id: string; offset: number } | null>(null);
+  // The memo nearest the viewport center, tracked on scroll, so toggling the
+  // sidebar (which animates the list width over ~0.25s) can keep that memo
+  // centered instead of jumping.
+  const centerAnchorRef = useRef<{ id: string; offset: number } | null>(null);
+  const restoringRef = useRef(false);
   const prevSidebarRef = useRef(true);
   const cursorPosRef = useRef<number | null>(null);
   const loadMemosRef = useRef<(cursor?: string) => Promise<void>>(async () => {});
+  // Live set of loaded memo ids (for dedupe without stale closures), and a flag
+  // that stops the background chain-load once a page brings nothing new (e.g. the
+  // cache already had everything) so we don't pointlessly re-crawl every page.
+  const memoIdsRef = useRef<Set<string>>(new Set());
+  const chainStopRef = useRef(false);
 
   // Paint last session's memos instantly from cache, so the feed isn't blank
   // while the fresh data loads in the background (see the load effects below).
   function hydrateFromCache(dbId?: string) {
     if (!dbId) return;
     const cached = readMemoCache(dbId);
-    if (cached) { setMemos(cached.memos); setArchivedAll(cached.archived); }
+    if (cached) {
+      // Pin the cached list to the bottom on first paint — otherwise it renders
+      // at the top and only jumps down once the fresh load runs (visible bounce).
+      initialScrollRef.current = true;
+      setMemos(cached.memos); setArchivedAll(cached.archived);
+    }
   }
 
   useEffect(() => {
@@ -805,10 +827,12 @@ export default function WidgetPage() {
   }, [memos, archivedAll, cfg?.databaseId, loading]);
 
   // Back-fill the archive property for configs saved before the 보관 feature
-  // existed. Without this, an old config has no archivedProp, so pressing 보관
-  // would never persist the checkbox to Notion.
+  // existed. We resolve this BEFORE the first data load (archiveResolved gate
+  // below) so the feed loads exactly once with the right archivedProp — backfilling
+  // afterwards used to trigger a second full reload, which made the list reflow.
   useEffect(() => {
-    if (!cfgLoaded || !cfg?.token || !cfg.databaseId || cfg.archivedProp) return;
+    if (!cfgLoaded) return;
+    if (!cfg?.token || !cfg.databaseId || cfg.archivedProp) { setArchiveResolved(true); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -817,14 +841,17 @@ export default function WidgetPage() {
           body: JSON.stringify({ token: cfg.token, databaseId: cfg.databaseId }),
         });
         const d = await r.json();
-        if (cancelled || !d.archivedPropName) return;
-        setCfg(prev => {
-          if (!prev || prev.archivedProp) return prev;
-          const updated = { ...prev, archivedProp: d.archivedPropName as string };
-          try { localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
-          return updated;
-        });
+        if (cancelled) return;
+        if (d.archivedPropName) {
+          setCfg(prev => {
+            if (!prev || prev.archivedProp) return prev;
+            const updated = { ...prev, archivedProp: d.archivedPropName as string };
+            try { localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+            return updated;
+          });
+        }
       } catch { /* ignore — archive just stays unavailable */ }
+      finally { if (!cancelled) setArchiveResolved(true); }
     })();
     return () => { cancelled = true; };
   }, [cfgLoaded, cfg?.token, cfg?.databaseId, cfg?.archivedProp]);
@@ -901,38 +928,49 @@ export default function WidgetPage() {
       });
       const r = await fetch(`/api/notion/memos?${q}`);
       const d = await r.json();
-      const reversed = [...(d.memos ?? [])].reverse();
+      const reversed: Memo[] = [...(d.memos ?? [])].reverse();
       if (cursor) {
-        // Anchor on the memo currently at the top of the list so it stays put
-        // when older memos are inserted above it. The actual scroll correction
-        // happens synchronously in a layout effect (before paint), with extra
-        // passes scheduled below to absorb late image/font height changes.
-        // Skip anchoring while still bottom-pinned (auto-fill below) — there we
-        // want the view to stay at the bottom on the most recent memo.
-        const scrollEl = scrollRef.current;
-        const anchorEl = initialScrollRef.current ? null : (scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null);
-        if (scrollEl && anchorEl) {
-          anchorRef.current = {
-            id: anchorEl.getAttribute("data-guestbook-entry-id")!,
-            offset: anchorEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top,
-          };
-          [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
-          setTimeout(() => { anchorRef.current = null; }, 800);
+        // Only the memos we don't already have (cache / earlier fetch) are new.
+        const fresh = reversed.filter((m: Memo) => !memoIdsRef.current.has(m.id));
+        if (fresh.length === 0) {
+          // This whole page was already loaded — the cache is up to date here, so
+          // stop the background chain instead of re-crawling the rest.
+          chainStopRef.current = true;
+        } else {
+          // Anchor on the memo currently at the top so it stays put when older
+          // memos are inserted above it (corrected synchronously in a layout
+          // effect, with extra passes for late image/font height changes).
+          // Skip anchoring while still bottom-pinned (auto-fill) — keep the view
+          // pinned to the most recent memo there.
+          const scrollEl = scrollRef.current;
+          const anchorEl = initialScrollRef.current ? null : (scrollEl?.querySelector("[data-guestbook-entry-id]") as HTMLElement | null);
+          if (scrollEl && anchorEl) {
+            anchorRef.current = {
+              id: anchorEl.getAttribute("data-guestbook-entry-id")!,
+              offset: anchorEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top,
+            };
+            [80, 200, 400, 700].forEach(t => setTimeout(restoreAnchor, t));
+            setTimeout(() => { anchorRef.current = null; }, 800);
+          }
+          setMemos(prev => [...fresh, ...prev]);
         }
-        // Dedupe by id: overlapping pages (e.g. a reload restarting the
-        // background chain while a previous fetch is still in flight) must not
-        // insert the same memo twice.
-        setMemos(prev => {
-          const seen = new Set(prev.map(m => m.id));
-          const fresh = reversed.filter((m: Memo) => !seen.has(m.id));
-          return fresh.length ? [...fresh, ...prev] : prev;
-        });
       } else {
-        setMemos(reversed);
-        // Stay pinned to the bottom until the user actually scrolls. A
-        // ResizeObserver/image-load listener (see effect below) re-pins
-        // whenever content grows — no arbitrary time window, so late-loading
-        // images on slow mobile networks can't push the latest memo offscreen.
+        // First/refresh load. If we already have memos (from cache), MERGE rather
+        // than replace — refresh the ones we have and append genuinely-new (newer)
+        // memos — so the list never collapses to one page and re-grows.
+        chainStopRef.current = false;
+        setMemos(prev => {
+          if (prev.length === 0) return reversed;
+          const incoming = new Map(reversed.map(m => [m.id, m] as const));
+          const prevIds = new Set(prev.map(m => m.id));
+          const refreshed = prev.map(m => incoming.get(m.id) ?? m);
+          const added = reversed.filter(m => !prevIds.has(m.id));
+          return [...refreshed, ...added];
+        });
+        // Stay pinned to the bottom until the user actually scrolls. The
+        // synchronous layout effect pins on this list change (before paint); the
+        // timed re-pins + a ResizeObserver below keep it pinned as late
+        // images/fonts grow the content over the next moments.
         initialScrollRef.current = true;
         [0, 80, 200, 400, 700].forEach(t =>
           setTimeout(() => {
@@ -980,9 +1018,10 @@ export default function WidgetPage() {
   useEffect(() => {
     if (!cfgLoaded) return;
     if (!cfg?.token) { router.replace("/onboarding"); return; }
+    if (!archiveResolved) return; // load once, after archivedProp is settled
     loadMemos();
     loadArchived();
-  }, [cfgLoaded, cfg, loadMemos, loadArchived, router]);
+  }, [cfgLoaded, archiveResolved, cfg, loadMemos, loadArchived, router]);
 
   // After the first page renders, keep chaining the next page in the background
   // until everything is loaded — so the full history ends up available without
@@ -991,10 +1030,22 @@ export default function WidgetPage() {
   // keeps it gentle on the Notion API. The view stays bottom-pinned (or, once the
   // reader scrolls, anchored) so this never yanks the scroll position around.
   useEffect(() => {
-    if (!cfgLoaded || loading || !hasMore || !nextCursor) return;
+    if (!cfgLoaded || loading || !hasMore || !nextCursor || chainStopRef.current) return;
     const t = setTimeout(() => loadMemosRef.current(nextCursor), 250);
     return () => clearTimeout(t);
   }, [memos, loading, hasMore, nextCursor, cfgLoaded]);
+
+  // Keep the dedupe id-set in sync with the loaded memos.
+  useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
+
+  // If web fonts load late, the text reflows taller — re-pin to the bottom once.
+  useEffect(() => {
+    const ready = (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready;
+    if (!ready) return;
+    ready.then(() => {
+      if (initialScrollRef.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
+  }, []);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
@@ -1003,7 +1054,7 @@ export default function WidgetPage() {
     if (!el) return;
     // Only a genuine user gesture (wheel/touch) ends the bottom-pin — never a
     // timer — so the view follows the bottom until the reader scrolls away.
-    const cancelInitial = () => { initialScrollRef.current = false; anchorRef.current = null; };
+    const cancelInitial = () => { initialScrollRef.current = false; anchorRef.current = null; setUserScrolled(true); };
     const pinIfInitial = () => {
       if (initialScrollRef.current) el.scrollTop = el.scrollHeight;
     };
@@ -1048,17 +1099,19 @@ export default function WidgetPage() {
     return () => ro.disconnect();
   }, [cfgLoaded]);
 
-  // Remember which memo sits at the top of the viewport as the reader scrolls.
+  // Remember which memo sits at the viewport center as the reader scrolls.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const record = () => {
-      const cTop = el.getBoundingClientRect().top;
+      if (restoringRef.current || initialScrollRef.current) return;
+      const cRect = el.getBoundingClientRect();
+      const mid = cRect.top + cRect.height / 2;
       const items = el.querySelectorAll<HTMLElement>("[data-guestbook-entry-id]");
       for (const it of items) {
         const r = it.getBoundingClientRect();
-        if (r.bottom > cTop + 1) {
-          topAnchorRef.current = { id: it.getAttribute("data-guestbook-entry-id")!, offset: r.top - cTop };
+        if (r.bottom >= mid) {
+          centerAnchorRef.current = { id: it.getAttribute("data-guestbook-entry-id")!, offset: r.top - cRect.top };
           return;
         }
       }
@@ -1068,31 +1121,49 @@ export default function WidgetPage() {
     return () => el.removeEventListener("scroll", record);
   }, [cfgLoaded]);
 
-  // When the sidebar opens/closes the list reflows; keep the memo the reader was
-  // looking at pinned in place (before paint) instead of letting it jump.
+  // When the sidebar opens/closes the list width animates and reflows; keep the
+  // memo the reader was centered on pinned through the whole transition.
   useLayoutEffect(() => {
     if (prevSidebarRef.current === showSidebar) return;
     prevSidebarRef.current = showSidebar;
-    const a = topAnchorRef.current;
     const el = scrollRef.current;
-    if (!a || !el) return;
-    const target = el.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
-    if (!target) return;
-    const newOffset = target.getBoundingClientRect().top - el.getBoundingClientRect().top;
-    el.scrollTop += newOffset - a.offset;
+    if (!el) return;
+    // During the initial load the global bottom-pin loop already holds the bottom
+    // (including the load-time sidebar auto-toggle) — don't run a second rAF here.
+    if (initialScrollRef.current) return;
+    const a = centerAnchorRef.current;
+    if (!a) return;
+    restoringRef.current = true;
+    const startT = performance.now();
+    let raf = 0;
+    const tick = () => {
+      const target = el.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
+      if (target) {
+        const delta = (target.getBoundingClientRect().top - el.getBoundingClientRect().top) - a.offset;
+        if (delta !== 0) el.scrollTop += delta;
+      }
+      if (performance.now() - startT < 340) raf = requestAnimationFrame(tick);
+      else restoringRef.current = false;
+    };
+    tick();
+    return () => { cancelAnimationFrame(raf); restoringRef.current = false; };
   }, [showSidebar]);
 
-  // On mobile, fit the widget to the visible viewport (above the keyboard) and
-  // keep scroll pinned to the bottom when the keyboard opens/closes.
+  // On mobile, only shrink the widget to the visible viewport WHEN THE KEYBOARD
+  // IS OPEN. Otherwise leave height at 100dvh and let the browser handle the URL
+  // bar — tracking every visualViewport change here made the widget (and the last
+  // bubble) bounce as the browser chrome settled on load.
   useEffect(() => {
     if (!mobile) return;
     const vv = window.visualViewport;
     const handler = () => {
-      if (vv) setViewportH(vv.height);
-      // Pin the page to the top so the shrunken widget aligns with the viewport
-      // (no white band above), then keep the latest memo in view.
-      window.scrollTo(0, 0);
-      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
+      if (!vv) return;
+      const keyboardOpen = window.innerHeight - vv.height > 120;
+      setViewportH(keyboardOpen ? vv.height : null);
+      if (keyboardOpen) {
+        window.scrollTo(0, 0);
+        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 80);
+      }
     };
     handler();
     vv?.addEventListener("resize", handler);
@@ -1307,8 +1378,15 @@ export default function WidgetPage() {
       const val = ta.value;
       const lineStart = val.lastIndexOf("\n", start - 1) + 1;
       const curLine = val.slice(lineStart, start);
+      // Numbered lists continue with the next number; checkbox/bullet keep their marker.
+      const numbered = curLine.match(/^(\s*)(\d+)\. /);
       const m = curLine.match(/^(\s*)(- \[[ x]\] |- )/);
-      if (m) {
+      if (numbered) {
+        const insert = "\n" + numbered[1] + (parseInt(numbered[2], 10) + 1) + ". ";
+        e.preventDefault();
+        cursorPosRef.current = start + insert.length;
+        setInputText(val.slice(0, start) + insert + val.slice(start));
+      } else if (m) {
         const marker = m[2].startsWith("- [") ? "- [ ] " : "- ";
         const insert = "\n" + m[1] + marker;
         e.preventDefault();
@@ -1718,8 +1796,10 @@ export default function WidgetPage() {
               : filteredMemos.map(renderMemo)
             }
 
-            {/* Subtle loading indicator when auto-loading older pages */}
-            {loading && memos.length > 0 && (
+            {/* Subtle loading indicator when auto-loading older pages — only after
+                the reader scrolls, so it doesn't pop in/out during the initial
+                bottom-pinned load and bounce the last bubble. */}
+            {loading && memos.length > 0 && userScrolled && (
               <div style={{ display:"flex", justifyContent:"center", padding:"4px 0", opacity:0.3 }}>
                 <span style={{ display:"inline-block", width:10, height:10, border:"1.5px solid var(--accent)", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
               </div>
@@ -1762,10 +1842,8 @@ export default function WidgetPage() {
             </div>
           )}
 
-          {/* Mobile formatting toolbar — no keyboard shortcuts on touch, so expose
-              bold/italic/strike + list markers as buttons. They wrap the selection
-              or insert a marker at the line start. */}
-          {mobile && (
+          {/* Mobile formatting toolbar — only while the input is focused. */}
+          {mobile && inputFocused && (
             <div style={{ display:"flex", gap:6, padding:"6px 8px 0", flexWrap:"wrap" }}>
               {[
                 { key:"b", label:"B",  style:{ fontWeight:800 } as React.CSSProperties, onClick:() => wrapSelection("**","**") },
@@ -1820,6 +1898,8 @@ export default function WidgetPage() {
                 onChange={e => setInputText(applyMarkdownShortcuts(e.target.value))}
                 onKeyDown={handleTextareaKeyDown}
                 onPaste={handlePaste}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setTimeout(() => setInputFocused(false), 150)}
                 placeholder="" autoComplete="off" rows={1}
                 className="y2k-input"
                 style={{

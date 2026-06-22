@@ -29,8 +29,8 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes y2kFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes typingBounce {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
@@ -42,11 +42,9 @@ body {
 
 /* widget */
 .y2k-widget {
-  transition: transform 0.2s ease;
   box-shadow: 2px 2px 0px color-mix(in srgb, var(--accent) 30%, transparent),
               4px 4px 12px color-mix(in srgb, var(--accent) 15%, transparent);
 }
-.y2k-widget:hover { transform: translateY(-2px); }
 
 /* scrollbar */
 .y2k-scroll::-webkit-scrollbar { width: 6px; }
