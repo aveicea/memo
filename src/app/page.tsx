@@ -752,6 +752,12 @@ export default function WidgetPage() {
   // Hide the list until the first bottom-pin lands so the initial top→bottom
   // scroll jump isn't visible (revealed within a frame, not a real delay).
   const [shown, setShown] = useState(false);
+  // Gate the first data load until the archive property has been resolved
+  // (present in config, or back-filled / confirmed absent) — so the feed loads
+  // exactly once instead of reloading after the back-fill.
+  const [archiveResolved, setArchiveResolved] = useState(false);
+  // Mobile: the formatting toolbar only shows while the input is focused.
+  const [inputFocused, setInputFocused] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   // Bottom-pinned from the very first render (incl. cache hydrate) so the list
@@ -817,10 +823,12 @@ export default function WidgetPage() {
   }, [memos, archivedAll, cfg?.databaseId, loading]);
 
   // Back-fill the archive property for configs saved before the 보관 feature
-  // existed. Without this, an old config has no archivedProp, so pressing 보관
-  // would never persist the checkbox to Notion.
+  // existed. We resolve this BEFORE the first data load (archiveResolved gate
+  // below) so the feed loads exactly once with the right archivedProp — backfilling
+  // afterwards used to trigger a second full reload, which made the list reflow.
   useEffect(() => {
-    if (!cfgLoaded || !cfg?.token || !cfg.databaseId || cfg.archivedProp) return;
+    if (!cfgLoaded) return;
+    if (!cfg?.token || !cfg.databaseId || cfg.archivedProp) { setArchiveResolved(true); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -829,14 +837,17 @@ export default function WidgetPage() {
           body: JSON.stringify({ token: cfg.token, databaseId: cfg.databaseId }),
         });
         const d = await r.json();
-        if (cancelled || !d.archivedPropName) return;
-        setCfg(prev => {
-          if (!prev || prev.archivedProp) return prev;
-          const updated = { ...prev, archivedProp: d.archivedPropName as string };
-          try { localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
-          return updated;
-        });
+        if (cancelled) return;
+        if (d.archivedPropName) {
+          setCfg(prev => {
+            if (!prev || prev.archivedProp) return prev;
+            const updated = { ...prev, archivedProp: d.archivedPropName as string };
+            try { localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+            return updated;
+          });
+        }
       } catch { /* ignore — archive just stays unavailable */ }
+      finally { if (!cancelled) setArchiveResolved(true); }
     })();
     return () => { cancelled = true; };
   }, [cfgLoaded, cfg?.token, cfg?.databaseId, cfg?.archivedProp]);
@@ -1026,9 +1037,10 @@ export default function WidgetPage() {
   useEffect(() => {
     if (!cfgLoaded) return;
     if (!cfg?.token) { router.replace("/onboarding"); return; }
+    if (!archiveResolved) return; // load once, after archivedProp is settled
     loadMemos();
     loadArchived();
-  }, [cfgLoaded, cfg, loadMemos, loadArchived, router]);
+  }, [cfgLoaded, archiveResolved, cfg, loadMemos, loadArchived, router]);
 
   // After the first page renders, keep chaining the next page in the background
   // until everything is loaded — so the full history ends up available without
@@ -1839,10 +1851,8 @@ export default function WidgetPage() {
             </div>
           )}
 
-          {/* Mobile formatting toolbar — no keyboard shortcuts on touch, so expose
-              bold/italic/strike + list markers as buttons. They wrap the selection
-              or insert a marker at the line start. */}
-          {mobile && (
+          {/* Mobile formatting toolbar — only while the input is focused. */}
+          {mobile && inputFocused && (
             <div style={{ display:"flex", gap:6, padding:"6px 8px 0", flexWrap:"wrap" }}>
               {[
                 { key:"b", label:"B",  style:{ fontWeight:800 } as React.CSSProperties, onClick:() => wrapSelection("**","**") },
@@ -1897,6 +1907,8 @@ export default function WidgetPage() {
                 onChange={e => setInputText(applyMarkdownShortcuts(e.target.value))}
                 onKeyDown={handleTextareaKeyDown}
                 onPaste={handlePaste}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setTimeout(() => setInputFocused(false), 150)}
                 placeholder="" autoComplete="off" rows={1}
                 className="y2k-input"
                 style={{
