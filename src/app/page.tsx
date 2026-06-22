@@ -754,7 +754,9 @@ export default function WidgetPage() {
   const [shown, setShown] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
-  const initialScrollRef = useRef(false);
+  // Bottom-pinned from the very first render (incl. cache hydrate) so the list
+  // never starts at the top; only a real user scroll (wheel/touch) ends it.
+  const initialScrollRef = useRef(true);
   // When older memos are prepended at the top, we keep the memo the reader was
   // looking at stationary by anchoring on its DOM element (id + viewport offset).
   const anchorRef = useRef<{ id: string; offset: number } | null>(null);
@@ -981,6 +983,26 @@ export default function WidgetPage() {
     return () => clearTimeout(t);
   }, [shown, cfgLoaded]);
 
+  // Hold the list pinned to the bottom for the initial period via a per-frame
+  // loop. The list reflows several times right after load (cache→fresh merge,
+  // the sidebar auto-toggle's width animation, late font/image height changes);
+  // re-pinning every frame keeps the bottom steady instead of bouncing. Ends as
+  // soon as the reader scrolls (initialScrollRef flips) or after a short window.
+  useEffect(() => {
+    if (!cfgLoaded) return;
+    let raf = 0;
+    const start = performance.now();
+    const loop = () => {
+      const el = scrollRef.current;
+      if (initialScrollRef.current && el && !anchorRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+      if (initialScrollRef.current && performance.now() - start < 2000) raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [cfgLoaded]);
+
   useEffect(() => { loadMemosRef.current = loadMemos; }, [loadMemos]);
 
   // Fetch the full archived set (all pages) for the 보관 group.
@@ -1104,23 +1126,19 @@ export default function WidgetPage() {
     prevSidebarRef.current = showSidebar;
     const el = scrollRef.current;
     if (!el) return;
-    // Pinned to the bottom (reader hasn't scrolled) → hold the bottom; otherwise
-    // hold the memo that was centered. Re-apply across the width transition.
-    const bottomPin = initialScrollRef.current;
-    const a = bottomPin ? null : centerAnchorRef.current;
-    if (!a && !bottomPin) return;
+    // During the initial load the global bottom-pin loop already holds the bottom
+    // (including the load-time sidebar auto-toggle) — don't run a second rAF here.
+    if (initialScrollRef.current) return;
+    const a = centerAnchorRef.current;
+    if (!a) return;
     restoringRef.current = true;
     const startT = performance.now();
     let raf = 0;
     const tick = () => {
-      if (bottomPin) {
-        el.scrollTop = el.scrollHeight;
-      } else if (a) {
-        const target = el.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
-        if (target) {
-          const delta = (target.getBoundingClientRect().top - el.getBoundingClientRect().top) - a.offset;
-          if (delta !== 0) el.scrollTop += delta;
-        }
+      const target = el.querySelector(`[data-guestbook-entry-id="${CSS.escape(a.id)}"]`) as HTMLElement | null;
+      if (target) {
+        const delta = (target.getBoundingClientRect().top - el.getBoundingClientRect().top) - a.offset;
+        if (delta !== 0) el.scrollTop += delta;
       }
       if (performance.now() - startT < 340) raf = requestAnimationFrame(tick);
       else restoringRef.current = false;
