@@ -749,9 +749,6 @@ export default function WidgetPage() {
   // When the memo list gets too narrow (small window / sidebar open), drop the
   // action-button text labels and show icon-only so they don't wrap to 2 lines.
   const [compactActions, setCompactActions] = useState(false);
-  // Hide the list until the first bottom-pin lands so the initial top→bottom
-  // scroll jump isn't visible (revealed within a frame, not a real delay).
-  const [shown, setShown] = useState(false);
   // Gate the first data load until the archive property has been resolved
   // (present in config, or back-filled / confirmed absent) — so the feed loads
   // exactly once instead of reloading after the back-fill.
@@ -760,9 +757,7 @@ export default function WidgetPage() {
   const [inputFocused, setInputFocused] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
-  // Bottom-pinned from the very first render (incl. cache hydrate) so the list
-  // never starts at the top; only a real user scroll (wheel/touch) ends it.
-  const initialScrollRef = useRef(true);
+  const initialScrollRef = useRef(false);
   // When older memos are prepended at the top, we keep the memo the reader was
   // looking at stationary by anchoring on its DOM element (id + viewport offset).
   const anchorRef = useRef<{ id: string; offset: number } | null>(null);
@@ -963,10 +958,17 @@ export default function WidgetPage() {
           const added = reversed.filter(m => !prevIds.has(m.id));
           return [...refreshed, ...added];
         });
-        // Stay pinned to the bottom: the synchronous layout effect pins on this
-        // list change (before paint), and a ResizeObserver re-pins as late
-        // images/fonts grow the content.
+        // Stay pinned to the bottom until the user actually scrolls. The
+        // synchronous layout effect pins on this list change (before paint); the
+        // timed re-pins + a ResizeObserver below keep it pinned as late
+        // images/fonts grow the content over the next moments.
         initialScrollRef.current = true;
+        [0, 80, 200, 400, 700].forEach(t =>
+          setTimeout(() => {
+            if (initialScrollRef.current && scrollRef.current)
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }, t)
+        );
       }
       setNextCursor(d.nextCursor);
       setHasMore(d.hasMore);
@@ -981,38 +983,8 @@ export default function WidgetPage() {
     if (anchorRef.current) restoreAnchor();
     else if (initialScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      // Reveal only after the first bottom-pin so the reader never sees the list
-      // render at the top and then jump down.
-      if (!shown) requestAnimationFrame(() => setShown(true));
     }
-  }, [memos, restoreAnchor, shown]);
-
-  // Safety net: never leave the list hidden (e.g. no memos / empty state).
-  useEffect(() => {
-    if (shown || !cfgLoaded) return;
-    const t = setTimeout(() => setShown(true), 600);
-    return () => clearTimeout(t);
-  }, [shown, cfgLoaded]);
-
-  // Hold the list pinned to the bottom for the initial period via a per-frame
-  // loop. The list reflows several times right after load (cache→fresh merge,
-  // the sidebar auto-toggle's width animation, late font/image height changes);
-  // re-pinning every frame keeps the bottom steady instead of bouncing. Ends as
-  // soon as the reader scrolls (initialScrollRef flips) or after a short window.
-  useEffect(() => {
-    if (!cfgLoaded) return;
-    let raf = 0;
-    const start = performance.now();
-    const loop = () => {
-      const el = scrollRef.current;
-      if (initialScrollRef.current && el && !anchorRef.current) {
-        el.scrollTop = el.scrollHeight;
-      }
-      if (initialScrollRef.current && performance.now() - start < 2000) raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [cfgLoaded]);
+  }, [memos, restoreAnchor]);
 
   useEffect(() => { loadMemosRef.current = loadMemos; }, [loadMemos]);
 
@@ -1764,8 +1736,7 @@ export default function WidgetPage() {
 
           {/* Memo list */}
           <div ref={scrollRef} className="y2k-scroll"
-            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px",
-              opacity: shown ? 1 : 0, transition: "opacity 0.12s ease" }}>
+            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px" }}>
 
             {loading && memos.length === 0 && (
               <div style={{ padding:40, textAlign:"center", color:"var(--accent)", fontSize:13 }}>
