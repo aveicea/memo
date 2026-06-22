@@ -755,10 +755,10 @@ export default function WidgetPage() {
   const [archiveResolved, setArchiveResolved] = useState(false);
   // Mobile: the formatting toolbar only shows while the input is focused.
   const [inputFocused, setInputFocused] = useState(false);
-  // Hold the list hidden until web fonts are ready, so the reader doesn't see the
-  // text reflow as each font swaps in (the list is bottom-pinned underneath, then
-  // fades in stable). On revisits fonts are cached, so this is near-instant.
-  const [fontsReady, setFontsReady] = useState(false);
+  // True once the reader scrolls away from the initial bottom-pin. The bottom
+  // "loading more" spinner only shows after this — during the initial bottom-
+  // pinned load it would pop in/out (~18px) and bounce the last bubble.
+  const [userScrolled, setUserScrolled] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
@@ -1038,19 +1038,13 @@ export default function WidgetPage() {
   // Keep the dedupe id-set in sync with the loaded memos.
   useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
 
-  // Reveal the list once web fonts are ready (so the font-swap reflow happens
-  // while hidden), then re-pin to the bottom. Hard-capped so it always shows.
+  // If web fonts load late, the text reflows taller — re-pin to the bottom once.
   useEffect(() => {
-    let done = false;
-    const reveal = () => {
-      if (done) return; done = true;
-      if (initialScrollRef.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      setFontsReady(true);
-    };
     const ready = (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready;
-    if (ready) ready.then(() => requestAnimationFrame(reveal)); else reveal();
-    const cap = setTimeout(reveal, 700);
-    return () => clearTimeout(cap);
+    if (!ready) return;
+    ready.then(() => {
+      if (initialScrollRef.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
   }, []);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
@@ -1060,7 +1054,7 @@ export default function WidgetPage() {
     if (!el) return;
     // Only a genuine user gesture (wheel/touch) ends the bottom-pin — never a
     // timer — so the view follows the bottom until the reader scrolls away.
-    const cancelInitial = () => { initialScrollRef.current = false; anchorRef.current = null; };
+    const cancelInitial = () => { initialScrollRef.current = false; anchorRef.current = null; setUserScrolled(true); };
     const pinIfInitial = () => {
       if (initialScrollRef.current) el.scrollTop = el.scrollHeight;
     };
@@ -1760,8 +1754,7 @@ export default function WidgetPage() {
 
           {/* Memo list */}
           <div ref={scrollRef} className="y2k-scroll"
-            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px",
-              opacity: fontsReady ? 1 : 0, transition: "opacity 0.1s ease" }}>
+            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px" }}>
 
             {loading && memos.length === 0 && (
               <div style={{ padding:40, textAlign:"center", color:"var(--accent)", fontSize:13 }}>
@@ -1803,8 +1796,10 @@ export default function WidgetPage() {
               : filteredMemos.map(renderMemo)
             }
 
-            {/* Subtle loading indicator when auto-loading older pages */}
-            {loading && memos.length > 0 && (
+            {/* Subtle loading indicator when auto-loading older pages — only after
+                the reader scrolls, so it doesn't pop in/out during the initial
+                bottom-pinned load and bounce the last bubble. */}
+            {loading && memos.length > 0 && userScrolled && (
               <div style={{ display:"flex", justifyContent:"center", padding:"4px 0", opacity:0.3 }}>
                 <span style={{ display:"inline-block", width:10, height:10, border:"1.5px solid var(--accent)", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
               </div>
