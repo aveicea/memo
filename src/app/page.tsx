@@ -755,6 +755,10 @@ export default function WidgetPage() {
   const [archiveResolved, setArchiveResolved] = useState(false);
   // Mobile: the formatting toolbar only shows while the input is focused.
   const [inputFocused, setInputFocused] = useState(false);
+  // Hold the list hidden until web fonts are ready, so the reader doesn't see the
+  // text reflow as each font swaps in (the list is bottom-pinned underneath, then
+  // fades in stable). On revisits fonts are cached, so this is near-instant.
+  const [fontsReady, setFontsReady] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const initialScrollRef = useRef(false);
@@ -1034,17 +1038,20 @@ export default function WidgetPage() {
   // Keep the dedupe id-set in sync with the loaded memos.
   useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
 
-  // When web fonts finish loading, the text reflows taller — re-pin to the bottom
-  // once so the last bubble doesn't float up for a frame after the swap.
+  // Reveal the list once web fonts are ready (so the font-swap reflow happens
+  // while hidden), then re-pin to the bottom. Hard-capped so it always shows.
   useEffect(() => {
+    let done = false;
+    const reveal = () => {
+      if (done) return; done = true;
+      if (initialScrollRef.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      setFontsReady(true);
+    };
     const ready = (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready;
-    if (!ready) return;
-    ready.then(() => {
-      if (initialScrollRef.current && scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
-    });
-  }, [cfgLoaded]);
+    if (ready) ready.then(() => requestAnimationFrame(reveal)); else reveal();
+    const cap = setTimeout(reveal, 700);
+    return () => clearTimeout(cap);
+  }, []);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
@@ -1753,7 +1760,8 @@ export default function WidgetPage() {
 
           {/* Memo list */}
           <div ref={scrollRef} className="y2k-scroll"
-            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px" }}>
+            style={{ flex:1, minHeight:0, overflowY:"scroll", padding:"0 14px 8px 8px",
+              opacity: fontsReady ? 1 : 0, transition: "opacity 0.1s ease" }}>
 
             {loading && memos.length === 0 && (
               <div style={{ padding:40, textAlign:"center", color:"var(--accent)", fontSize:13 }}>
