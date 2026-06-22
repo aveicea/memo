@@ -780,7 +780,12 @@ export default function WidgetPage() {
   function hydrateFromCache(dbId?: string) {
     if (!dbId) return;
     const cached = readMemoCache(dbId);
-    if (cached) { setMemos(cached.memos); setArchivedAll(cached.archived); }
+    if (cached) {
+      // Pin the cached list to the bottom on first paint — otherwise it renders
+      // at the top and only jumps down once the fresh load runs (visible bounce).
+      initialScrollRef.current = true;
+      setMemos(cached.memos); setArchivedAll(cached.archived);
+    }
   }
 
   useEffect(() => {
@@ -1028,6 +1033,18 @@ export default function WidgetPage() {
 
   // Keep the dedupe id-set in sync with the loaded memos.
   useEffect(() => { memoIdsRef.current = new Set(memos.map(m => m.id)); }, [memos]);
+
+  // When web fonts finish loading, the text reflows taller — re-pin to the bottom
+  // once so the last bubble doesn't float up for a frame after the swap.
+  useEffect(() => {
+    const ready = (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready;
+    if (!ready) return;
+    ready.then(() => {
+      if (initialScrollRef.current && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+  }, [cfgLoaded]);
 
   // Load older pages when the user scrolls near the top (instead of auto-loading
   // immediately, which would push content down and snap the scroll position up).
