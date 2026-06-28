@@ -1602,7 +1602,7 @@ export default function WidgetPage() {
     <div style={{
       width:"100%", height: mobile && viewportH ? viewportH : "100dvh", boxSizing:"border-box", overflow:"hidden",
       padding: mobile ? 0 : (widget ? "15px 20px 20px" : 16), display:"flex", alignItems:"center", justifyContent:"center",
-      fontFamily: fontFamily, background:"#ffffff",
+      fontFamily: fontFamily, background: mobile ? "#ffffff" : "transparent",
     }}>
       <style>{cssVars}</style>
       {mobile && <style>{`.mobile-memo:hover{transform:none!important;box-shadow:none!important;}`}</style>}
