@@ -622,17 +622,17 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, compact, can
             <div style={{ maxWidth: (hover || showActions || memo.pinned) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.pinned) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onPin} title={memo.pinned ? "고정 해제" : "고정"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                  color: memo.pinned ? "var(--accent)" : "#ccc", transition: "color 0.15s" }}
+                  color: memo.pinned ? "var(--accent)" : "#e2e2e2", opacity: memo.pinned ? 1 : 0.6, transition: "color 0.15s, opacity 0.15s" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-                onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#ccc")}
+                onMouseLeave={e => (e.currentTarget.style.color = memo.pinned ? "var(--accent)" : "#e2e2e2")}
               ><PinIcon /></button>
             </div>
             <div style={{ maxWidth: (hover || showActions || memo.important) ? 22 : 0, overflow: "hidden", opacity: (hover || showActions || memo.important) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
               <button onClick={onImportant} title={memo.important ? "중요 해제" : "중요"}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 1,
-                  color: memo.important ? "var(--accent)" : "#ccc", transition: "color 0.15s", fontSize: 13 }}
+                  color: memo.important ? "var(--accent)" : "#e2e2e2", opacity: memo.important ? 1 : 0.6, transition: "color 0.15s, opacity 0.15s", fontSize: 13 }}
                 onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-                onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#ccc")}
+                onMouseLeave={e => (e.currentTarget.style.color = memo.important ? "var(--accent)" : "#e2e2e2")}
               >♥</button>
             </div>
             <div style={{ maxWidth: (hover || showActions) ? 26 : 0, overflow: "hidden", opacity: (hover || showActions) ? 1 : 0, transition: "max-width 0.15s, opacity 0.15s" }}>
@@ -644,43 +644,44 @@ function MemoBubble({ memo, folderColor, folderBubbleColor, mobile, compact, can
             </div>
           </div>
 
-          {/* 더보기/접기 — 말풍선 바로 왼쪽 */}
-          {(() => {
-            const lineCount = parseLines(memo.content).length;
-            if (lineCount <= MEMO_MAX_LINES) return null;
-            return (
-              <button onClick={() => setExpanded(v => !v)}
-                style={{ alignSelf: "flex-end", background: "none", border: "none", cursor: "pointer",
-                  padding: mobile ? "4px 6px" : "2px 4px", fontSize: 10, color: textColor,
-                  opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s",
-                  whiteSpace: "nowrap", flexShrink: 0 }}>
-                {expanded ? "접기 ↑" : `...더보기 (+${lineCount - MEMO_MAX_LINES})`}
-              </button>
-            );
-          })()}
-
-          {/* BUBBLE */}
-          <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
-            onMouseLeave={mobile ? undefined : () => scheduleActions(false)}
-            onClick={mobile ? () => setShowActions(v => !v) : undefined}
-            style={{
-              maxWidth: mobile ? "90%" : "75%",
-              background: bubbleBg, border: "none",
-              padding: mobile ? "9px 13px" : "9px 14px", borderRadius: "12px 12px 2px 12px",
-              fontSize: 13, color: textColor, lineHeight: 1.4,
-              overflowWrap: "break-word", wordBreak: "normal", whiteSpace: "pre-wrap",
-              boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
-              transition: "background 0.2s, color 0.2s",
-            }}>
-            <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} expanded={expanded} />
-            {memo.imageUrls.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 4, marginTop: memo.content.trim() ? 8 : 0 }}>
-                {memo.imageUrls.map((url, idx) => (
-                  <img key={idx} src={url} alt=""
-                    style={{ width: "100%", maxHeight: 150, aspectRatio: "4/3", objectFit: "cover", borderRadius: 5, border: "1px solid rgba(0,0,0,0.08)", display: "block" }} />
-                ))}
-              </div>
-            )}
+          {/* BUBBLE + 더보기 (더보기는 말풍선 바로 밑 왼쪽에 붙는다) */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", maxWidth: mobile ? "90%" : "75%", minWidth: 0 }}>
+            <div onMouseEnter={mobile ? undefined : () => scheduleActions(true)}
+              onMouseLeave={mobile ? undefined : () => scheduleActions(false)}
+              onClick={mobile ? () => setShowActions(v => !v) : undefined}
+              style={{
+                maxWidth: "100%",
+                background: bubbleBg, border: "none",
+                padding: mobile ? "9px 13px" : "9px 14px", borderRadius: "12px 12px 2px 12px",
+                fontSize: 13, color: textColor, lineHeight: 1.4,
+                overflowWrap: "break-word", wordBreak: "normal", whiteSpace: "pre-wrap",
+                boxShadow: "1px 1px 0 rgba(0,0,0,0.02)", fontFamily: "inherit",
+                transition: "background 0.2s, color 0.2s",
+              }}>
+              <MemoContent content={memo.content} todos={memo.todos} onToggle={onToggle} expanded={expanded} />
+              {memo.imageUrls.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 4, marginTop: memo.content.trim() ? 8 : 0 }}>
+                  {memo.imageUrls.map((url, idx) => (
+                    <img key={idx} src={url} alt=""
+                      style={{ width: "100%", maxHeight: 150, aspectRatio: "4/3", objectFit: "cover", borderRadius: 5, border: "1px solid rgba(0,0,0,0.08)", display: "block" }} />
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* 더보기/접기 — 말풍선 바로 밑 왼쪽. 색은 중요 여부와 무관하게 기존색 유지 */}
+            {(() => {
+              const lineCount = parseLines(memo.content).length;
+              if (lineCount <= MEMO_MAX_LINES) return null;
+              return (
+                <button onClick={() => setExpanded(v => !v)}
+                  style={{ alignSelf: "flex-start", background: "none", border: "none", cursor: "pointer",
+                    padding: mobile ? "4px 4px" : "2px 2px", marginTop: 1, fontSize: 10, color: "var(--msg-text-color)",
+                    opacity: 0.4, fontFamily: "inherit", transition: "opacity 0.15s",
+                    whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {expanded ? "접기 ↑" : `...더보기 (+${lineCount - MEMO_MAX_LINES})`}
+                </button>
+              );
+            })()}
           </div>
         </div>
 
